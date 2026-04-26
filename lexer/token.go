@@ -8,6 +8,15 @@ type Token struct {
 }
 
 const (
+	// special
 	EOF     = "EOF"
 	ILLEGAL = "ILLEGAL"
+
+	// identifiers + literals
+	IDENT   = "IDENT"
+	INT_LIT = "INT_LIT"
+
+	// operators
+	ASSIGN  = "="
+	DECLARE = ":="
 )

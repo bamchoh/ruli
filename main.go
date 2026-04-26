@@ -6,8 +6,11 @@ import (
 )
 
 func main() {
-	l := lexer.New("")
+	l := lexer.New("x := 10")
 
-	tok := l.NextToken()
-	fmt.Println(tok.Type, tok.Literal)
+	var tok lexer.Token
+	for tok.Type != lexer.EOF {
+		tok = l.NextToken()
+		fmt.Println(tok.Type, tok.Literal)
+	}
 }
