@@ -19,4 +19,12 @@ const (
 	// operators
 	ASSIGN  = "="
 	DECLARE = ":="
+
+	PLUS     = "+"
+	MINUS    = "-"
+	BANG     = "!"
+	ASTERISK = "*"
+	SLASH    = "/"
+
+	SEMICOLON = ";"
 )

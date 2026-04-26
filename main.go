@@ -2,15 +2,22 @@ package main
 
 import (
 	"fmt"
+	"ruli/ast"
 	"ruli/lexer"
+	"ruli/parser"
 )
 
 func main() {
-	l := lexer.New("x := 10")
+	input := "x := 10 + 20"
 
-	var tok lexer.Token
-	for tok.Type != lexer.EOF {
-		tok = l.NextToken()
-		fmt.Println(tok.Type, tok.Literal)
-	}
+	l := lexer.New(input)
+	p := parser.New(l)
+
+	program := p.ParseProgram()
+
+	stmt := program.Statements[0].(*ast.AssignStatement)
+
+	expr := stmt.Value.(*ast.BinaryExpression)
+
+	fmt.Println(expr.String())
 }

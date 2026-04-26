@@ -21,6 +21,14 @@ func (l *Lexer) NextToken() Token {
 
 	case '=':
 		tok = Token{Type: ASSIGN, Literal: "="}
+	case '+':
+		tok = Token{Type: PLUS, Literal: "+"}
+	case '-':
+		tok = Token{Type: MINUS, Literal: "-"}
+	case '*':
+		tok = Token{Type: ASTERISK, Literal: "*"}
+	case '/':
+		tok = Token{Type: SLASH, Literal: "/"}
 
 	case ':':
 		if l.peekChar() == '=' {

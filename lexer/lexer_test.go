@@ -3,7 +3,9 @@ package lexer
 import "testing"
 
 func TestAssignStatement(t *testing.T) {
-	input := "x := 10"
+	input := `x := 10
+	y := 10 + 20 - 30 * 40 / 50
+	`
 
 	l := New(input)
 
@@ -14,6 +16,17 @@ func TestAssignStatement(t *testing.T) {
 		{IDENT, "x"},
 		{DECLARE, ":="},
 		{INT_LIT, "10"},
+		{IDENT, "y"},
+		{DECLARE, ":="},
+		{INT_LIT, "10"},
+		{PLUS, "+"},
+		{INT_LIT, "20"},
+		{MINUS, "-"},
+		{INT_LIT, "30"},
+		{ASTERISK, "*"},
+		{INT_LIT, "40"},
+		{SLASH, "/"},
+		{INT_LIT, "50"},
 		{EOF, ""},
 	}
 
