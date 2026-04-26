@@ -1,3 +1,5 @@
 # ruli
 
-![Logo](logo.png "ロゴ")
+<p align="center">
+  <img alt="ロゴ" src="logo.png" width="50%">
+</p>
