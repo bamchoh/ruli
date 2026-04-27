@@ -79,11 +79,52 @@ if true {
 
 ## 4.1 基本型（v1）
 
-- INT
-- REAL
-- BOOL
+| 型    | 符号     | サイズ | 備考           |
+| ----- | -------- | ------ | -------------- |
+| BOOL  | -        | 1 bit  | true/false     |
+| SINT  | Signed   | 8 bit  |                |
+| USINT | Unsigned | 8 bit  |                |
+| BYTE  | Unsigned | 8 bit  | Alias of USINT |
+| INT   | Signed   | 16 bit |                |
+| UINT  | Unsigned | 16 bit |                |
+| WORD  | Unsigned | 16 bit | Alias of UINT  |
+| DINT  | Signed   | 32 bit |                |
+| UDINT | Unsigned | 32 bit |                |
+| DWORD | Unsigned | 32 bit | Alias of UDINT |
+| LINT  | Signed   | 64 bit |                |
+| ULINT | Unsigned | 64 bit |                |
+| LWORD | Unsigned | 64 bit | Alias of ULINT |
+| REAL  | -        | 32 bit | float          |
+| LREAL | -        | 64 bit | double         |
 
 STRINGはv1では未サポート（後日検討）
+
+## 4.1.1 変数代入
+
+```
+a = 10
+```
+
+- 未定義の変数への代入はエラー
+
+## 4.1.2 変数束縛
+
+```
+a := 10
+```
+
+## 4.1.3 変数宣言
+
+```
+a : INT
+b: DINT
+```
+
+## 4.1.4 変数宣言 + 初期化
+
+```
+a : INT = 10
+```
 
 ## 4.2 distinct type
 
