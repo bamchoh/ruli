@@ -17,6 +17,7 @@ const (
 	INT_LIT = "INT_LIT"
 
 	// operators
+	COLON   = ":"
 	ASSIGN  = "="
 	DECLARE = ":="
 
@@ -27,4 +28,8 @@ const (
 	SLASH    = "/"
 
 	SEMICOLON = ";"
+
+	INT  = "INT"
+	REAL = "REAL"
+	BOOL = "BOOL"
 )

@@ -3,6 +3,7 @@ package parser
 import (
 	"ruli/ast"
 	"ruli/lexer"
+	"strconv"
 )
 
 const (
@@ -80,26 +81,69 @@ func (p *Parser) parseStatement() ast.Statement {
 	switch p.curToken.Type {
 
 	case lexer.IDENT:
-		if p.peekToken.Type == lexer.DECLARE {
-			return p.parseAssignStatement()
+		if p.peekToken.Type == lexer.DECLARE || p.peekToken.Type == lexer.COLON {
+			return p.parseVarDeclStatement()
 		}
 	}
 
 	return nil
 }
 
-func (p *Parser) parseAssignStatement() *ast.AssignStatement {
+func (p *Parser) parseVarDeclStatement() *ast.VarDeclStatement {
 
-	stmt := &ast.AssignStatement{
+	stmt := &ast.VarDeclStatement{
 		Name: p.curToken.Literal,
 	}
 
-	p.nextToken() // skip IDENT
-	p.nextToken() // skip :=
+	// x := 10
+	if p.peekToken.Type == lexer.DECLARE {
+		p.nextToken() // :=
+		p.nextToken() // first expr token
 
-	stmt.Value = p.parseExpression(LOWEST)
+		stmt.Value = p.parseExpression(LOWEST)
+		return stmt
+	}
+
+	// x: INT = 10
+	// x: INT
+	if p.peekToken.Type == lexer.COLON {
+		p.nextToken() // :
+		p.nextToken() // type ident
+
+		stmt.Type = p.parseType()
+
+		if p.peekToken.Type == lexer.ASSIGN {
+			p.nextToken() // =
+			p.nextToken() // expr first token
+
+			stmt.Value = p.parseExpression(LOWEST)
+		}
+
+		return stmt
+	}
 
 	return stmt
+}
+
+func (p *Parser) parseType() ast.TypeNode {
+
+	switch p.curToken.Type {
+
+	case lexer.INT:
+		return &ast.BasicType{Name: "INT"}
+
+	case lexer.REAL:
+		return &ast.BasicType{Name: "REAL"}
+
+	case lexer.BOOL:
+		return &ast.BasicType{Name: "BOOL"}
+
+	case lexer.IDENT:
+		// distinct type / struct名 将来対応
+		return &ast.BasicType{Name: p.curToken.Literal}
+	}
+
+	return nil
 }
 
 func (p *Parser) parseExpression(precedence int) ast.Expression {
@@ -127,8 +171,12 @@ func (p *Parser) parseExpression(precedence int) ast.Expression {
 }
 
 func (p *Parser) parseIntegerLiteral() ast.Expression {
+	value, err := strconv.ParseInt(p.curToken.Literal, 0, 64)
+	if err != nil {
+		return nil
+	}
 	return &ast.IntegerLiteral{
-		Value: p.curToken.Literal,
+		Value: int(value),
 	}
 }
 

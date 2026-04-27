@@ -35,6 +35,8 @@ func (l *Lexer) NextToken() Token {
 			ch := l.ch
 			l.readChar()
 			tok = Token{Type: DECLARE, Literal: string(ch) + string(l.ch)}
+		} else {
+			tok = Token{Type: COLON, Literal: string(l.ch)}
 		}
 
 	case 0:
