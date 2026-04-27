@@ -6,6 +6,34 @@ import (
 	"testing"
 )
 
+func TestAssignStatement(t *testing.T) {
+	input := `x = 10`
+
+	l := lexer.New(input)
+	p := New(l)
+	program := p.ParseProgram()
+	if len(program.Statements) != 1 {
+		t.Fatalf("program.Statements does not contain 1 statement. got=%d",
+			len(program.Statements))
+	}
+
+	stmt := program.Statements[0]
+	assignStmt, ok := stmt.(*ast.AssignStatement)
+	if !ok {
+		t.Fatalf("stmt not *ast.AssignStatement. got=%T", stmt)
+	}
+
+	if assignStmt.Name != "x" {
+		t.Fatalf("assignStmt.Name not %s. got=%s", "x", assignStmt.Name)
+	}
+
+	val := assignStmt.Value
+	if !testLiteralExpression(t, val, 10) {
+		return
+	}
+
+}
+
 func TestVarDeclStatement(t *testing.T) {
 	tests := []struct {
 		input              string

@@ -81,8 +81,14 @@ func (p *Parser) parseStatement() ast.Statement {
 	switch p.curToken.Type {
 
 	case lexer.IDENT:
-		if p.peekToken.Type == lexer.DECLARE || p.peekToken.Type == lexer.COLON {
+
+		switch p.peekToken.Type {
+
+		case lexer.DECLARE, lexer.COLON:
 			return p.parseVarDeclStatement()
+
+		case lexer.ASSIGN:
+			return p.parseAssignStatement()
 		}
 	}
 
@@ -122,6 +128,16 @@ func (p *Parser) parseVarDeclStatement() *ast.VarDeclStatement {
 		return stmt
 	}
 
+	return stmt
+}
+
+func (p *Parser) parseAssignStatement() *ast.AssignStatement {
+	stmt := &ast.AssignStatement{
+		Name: p.curToken.Literal,
+	}
+	p.nextToken() // skip =
+	p.nextToken() // first expr token
+	stmt.Value = p.parseExpression(LOWEST)
 	return stmt
 }
 

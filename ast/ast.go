@@ -36,7 +36,7 @@ type AssignStatement struct {
 
 func (as *AssignStatement) statementNode() {}
 func (as *AssignStatement) String() string {
-	return as.Name + " := " + as.Value.String()
+	return as.Name + " = " + as.Value.String()
 }
 
 type VarDeclStatement struct {

@@ -7,7 +7,7 @@ import (
 )
 
 func main() {
-	input := "x : INT = 10"
+	input := "x = 10"
 
 	l := lexer.New(input)
 	p := parser.New(l)

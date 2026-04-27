@@ -6,6 +6,7 @@ func TestAssignStatement(t *testing.T) {
 	input := `x := 10
 	y := 10 + 20 - 30 * 40 / 50
 	z : INT = 10
+	a = 10
 	`
 
 	l := New(input)
@@ -31,6 +32,9 @@ func TestAssignStatement(t *testing.T) {
 		{IDENT, "z"},
 		{COLON, ":"},
 		{IDENT, "INT"},
+		{ASSIGN, "="},
+		{INT_LIT, "10"},
+		{IDENT, "a"},
 		{ASSIGN, "="},
 		{INT_LIT, "10"},
 		{EOF, ""},
