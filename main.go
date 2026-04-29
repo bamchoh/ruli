@@ -1,14 +1,25 @@
 package main
 
 import (
-	"fmt"
 	"ruli/evaluator"
 	"ruli/lexer"
 	"ruli/parser"
 )
 
 func main() {
-	input := `x := 0; y := 20;for i := 0; i < 5; i++ { print(x); x = x + i }`
+	input := `
+for i := 0; i < 10; i++ {
+    if i == 3 {
+        continue
+    }
+
+    if i == 7 {
+        break
+    }
+
+    print(i)
+}	
+	`
 
 	l := lexer.New(input)
 	p := parser.New(l)
@@ -16,9 +27,4 @@ func main() {
 
 	env := evaluator.NewEnvironment()
 	evaluator.Eval(program, env)
-
-	for _, name := range []string{"x", "y"} {
-		v, _ := env.Get(name)
-		fmt.Println(name, "=", v.Inspect(), v.Type())
-	}
 }

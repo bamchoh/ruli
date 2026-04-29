@@ -103,6 +103,12 @@ func (p *Parser) parseStatement() ast.Statement {
 	case lexer.FOR:
 		return p.parseForStatement()
 
+	case lexer.BREAK:
+		return &ast.BreakStatement{}
+
+	case lexer.CONTINUE:
+		return &ast.ContinueStatement{}
+
 	case lexer.IDENT:
 
 		switch p.peekToken.Type {

@@ -50,12 +50,17 @@ const (
 	INC = "++"
 	DEC = "--"
 	FOR = "FOR"
+
+	BREAK    = "BREAK"
+	CONTINUE = "CONTINUE"
 )
 
 var keywords = map[string]TokenType{
-	"if":   IF,
-	"else": ELSE,
-	"for":  FOR,
+	"if":       IF,
+	"else":     ELSE,
+	"for":      FOR,
+	"break":    BREAK,
+	"continue": CONTINUE,
 }
 
 func LookupIdent(ident string) TokenType {

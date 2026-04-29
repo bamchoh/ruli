@@ -88,6 +88,12 @@ func Eval(node ast.Node, env *Environment) object.Object {
 	case *ast.ExpressionStatement:
 		return Eval(node.Expression, env)
 
+	case *ast.BreakStatement:
+		return &object.BreakSignal{}
+
+	case *ast.ContinueStatement:
+		return &object.ContinueSignal{}
+
 	}
 
 	return &object.Null{}
@@ -149,6 +155,13 @@ func evalBlockStatement(block *ast.BlockStatement, env *Environment) object.Obje
 
 	for _, stmt := range block.Statements {
 		result = Eval(stmt, env)
+
+		if result != nil {
+			rt := result.Type()
+			if rt == object.BREAK_OBJ || rt == object.CONTINUE_OBJ {
+				return result
+			}
+		}
 	}
 
 	return result
@@ -209,7 +222,19 @@ func evalForStatement(stmt *ast.ForStatement, env *Environment) object.Object {
 			break
 		}
 
-		Eval(stmt.Body, env)
+		result := Eval(stmt.Body, env)
+
+		if result != nil {
+			switch result.Type() {
+			case object.BREAK_OBJ:
+				return &object.Null{}
+
+			case object.CONTINUE_OBJ:
+				Eval(stmt.Post, env)
+				continue
+			}
+		}
+
 		Eval(stmt.Post, env)
 	}
 

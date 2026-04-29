@@ -183,3 +183,19 @@ func (ce *CallExpression) expressionNode() {}
 func (ce *CallExpression) String() string {
 	return "call"
 }
+
+type BreakStatement struct{}
+
+func (bs *BreakStatement) statementNode() {}
+
+func (bs *BreakStatement) String() string {
+	return "break"
+}
+
+type ContinueStatement struct{}
+
+func (cs *ContinueStatement) statementNode() {}
+
+func (cs *ContinueStatement) String() string {
+	return "continue"
+}
