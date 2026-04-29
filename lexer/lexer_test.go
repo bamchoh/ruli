@@ -12,6 +12,7 @@ func TestAssignStatement(t *testing.T) {
 	} else {
 		y := x / 2
 	}
+	for i := 0; i < 5; i++ { x = i }
 	`
 
 	l := New(input)
@@ -60,6 +61,22 @@ func TestAssignStatement(t *testing.T) {
 		{IDENT, "x"},
 		{SLASH, "/"},
 		{INT_LIT, "2"},
+		{RBRACE, "}"},
+		{FOR, "for"},
+		{IDENT, "i"},
+		{DECLARE, ":="},
+		{INT_LIT, "0"},
+		{SEMICOLON, ";"},
+		{IDENT, "i"},
+		{LT, "<"},
+		{INT_LIT, "5"},
+		{SEMICOLON, ";"},
+		{IDENT, "i"},
+		{INC, "++"},
+		{LBRACE, "{"},
+		{IDENT, "x"},
+		{ASSIGN, "="},
+		{IDENT, "i"},
 		{RBRACE, "}"},
 		{EOF, ""},
 	}

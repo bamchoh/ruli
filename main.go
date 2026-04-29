@@ -8,12 +8,7 @@ import (
 )
 
 func main() {
-	input := `x := 5
-if x > 5 {
-	y := x * 2
-} else {
-	y := x / 2
-}`
+	input := `x := 0; y := 20;for i := 0; i < 5; i++ { x = x + 1 }`
 
 	l := lexer.New(input)
 	p := parser.New(l)

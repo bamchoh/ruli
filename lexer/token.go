@@ -43,11 +43,16 @@ const (
 
 	LBRACE = "{"
 	RBRACE = "}"
+
+	INC = "++"
+	DEC = "--"
+	FOR = "FOR"
 )
 
 var keywords = map[string]TokenType{
 	"if":   IF,
 	"else": ELSE,
+	"for":  FOR,
 }
 
 func LookupIdent(ident string) TokenType {

@@ -282,3 +282,110 @@ func testInfixExpression(t *testing.T, exp ast.Expression, left interface{}, ope
 
 	return true
 }
+
+func TestIncrementDecrementStatement(t *testing.T) {
+	tests := []struct {
+		input            string
+		expectedName     string
+		expectedOperator string
+	}{
+		{`x++`, "x", "++"},
+		{`x--`, "x", "--"},
+	}
+
+	for _, tt := range tests {
+		l := lexer.New(tt.input)
+		p := New(l)
+
+		program := p.ParseProgram()
+
+		if len(program.Statements) != 1 {
+			t.Fatalf("program.Statements does not contain 1 statement. got=%d",
+				len(program.Statements))
+		}
+
+		stmt := program.Statements[0]
+
+		if incDecStmt, ok := stmt.(*ast.IncDecStatement); !ok {
+			t.Fatalf("stmt not *ast.IncDecStatement. got=%T", stmt)
+		} else {
+			if incDecStmt.Name != tt.expectedName {
+				t.Fatalf("Name not as expected")
+			}
+
+			if incDecStmt.Operator != tt.expectedOperator {
+				t.Fatalf("Operator not as expected. got=%s", incDecStmt.Operator)
+			}
+		}
+	}
+}
+
+func TestForStatement(t *testing.T) {
+	input := `for i := 0; i < 10; i++ { x = i }`
+
+	l := lexer.New(input)
+	p := New(l)
+
+	program := p.ParseProgram()
+
+	if len(program.Statements) != 1 {
+		t.Fatalf("program.Statements does not contain 1 statement. got=%d",
+			len(program.Statements))
+	}
+
+	stmt := program.Statements[0]
+
+	if forStmt, ok := stmt.(*ast.ForStatement); !ok {
+		t.Fatalf("stmt not *ast.ForStatement. got=%T", stmt)
+	} else {
+		if !testVarDeclStatement(t, forStmt.Init, "i", "") {
+			t.Fatalf("Init not as expected")
+		}
+
+		if !testInfixExpression(t, forStmt.Condition, "i", "<", 10) {
+			t.Fatalf("Condition not as expected")
+		}
+
+		if incDecStmt, ok := forStmt.Post.(*ast.IncDecStatement); !ok {
+			t.Fatalf("Post not *ast.IncDecStatement. got=%T", forStmt.Post)
+		} else {
+			if incDecStmt.Name != "i" {
+				t.Fatalf("Post Name not as expected")
+			}
+
+			if incDecStmt.Operator != "++" {
+				t.Fatalf("Post Operator not as expected. got=%s", incDecStmt.Operator)
+			}
+		}
+
+		if len(forStmt.Body.Statements) != 1 {
+			t.Fatalf("forStmt.Body.Statements does not contain 1 statement. got=%d",
+				len(forStmt.Body.Statements))
+		}
+
+		bodyStmt := forStmt.Body.Statements[0]
+
+		if !testAssignStatement(t, bodyStmt, "x", "i") {
+			t.Fatalf("Body statement not as expected")
+		}
+	}
+}
+
+func testAssignStatement(t *testing.T, s ast.Statement, name string, value string) bool {
+	assignStmt, ok := s.(*ast.AssignStatement)
+	if !ok {
+		t.Errorf("s not *ast.AssignStatement. got=%T", s)
+		return false
+	}
+
+	if assignStmt.Name != name {
+		t.Errorf("assignStmt.Name not %s. got=%s", name, assignStmt.Name)
+		return false
+	}
+
+	if !testIdentifier(t, assignStmt.Value, value) {
+		return false
+	}
+
+	return true
+}

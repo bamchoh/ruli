@@ -135,3 +135,27 @@ func (ie *IfStatement) String() string {
 
 	return out.String()
 }
+
+type IncDecStatement struct {
+	Name     string
+	Operator string
+}
+
+func (is *IncDecStatement) statementNode() {}
+
+func (is *IncDecStatement) String() string {
+	return is.Name + is.Operator
+}
+
+type ForStatement struct {
+	Init      Statement
+	Condition Expression
+	Post      Statement
+	Body      *BlockStatement
+}
+
+func (fs *ForStatement) statementNode() {}
+
+func (fs *ForStatement) String() string {
+	return "for"
+}

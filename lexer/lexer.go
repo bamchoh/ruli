@@ -44,9 +44,23 @@ func (l *Lexer) NextToken() Token {
 		tok = Token{Type: GT, Literal: ">"}
 
 	case '+':
-		tok = Token{Type: PLUS, Literal: "+"}
+		if l.peekChar() == '+' {
+			ch := l.ch
+			l.readChar()
+			tok = Token{Type: INC, Literal: string(ch) + string(l.ch)}
+		} else {
+			tok = Token{Type: PLUS, Literal: "+"}
+		}
+
 	case '-':
-		tok = Token{Type: MINUS, Literal: "-"}
+		if l.peekChar() == '-' {
+			ch := l.ch
+			l.readChar()
+			tok = Token{Type: DEC, Literal: string(ch) + string(l.ch)}
+		} else {
+			tok = Token{Type: MINUS, Literal: "-"}
+		}
+
 	case '*':
 		tok = Token{Type: ASTERISK, Literal: "*"}
 	case '/':
@@ -66,6 +80,9 @@ func (l *Lexer) NextToken() Token {
 
 	case '}':
 		tok = Token{Type: RBRACE, Literal: "}"}
+
+	case ';':
+		tok = Token{Type: SEMICOLON, Literal: ";"}
 
 	case 0:
 		tok = Token{Type: EOF, Literal: ""}

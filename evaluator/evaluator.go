@@ -60,6 +60,12 @@ func Eval(node ast.Node, env *Environment) object.Object {
 	case *ast.BlockStatement:
 		return evalBlockStatement(node, env)
 
+	case *ast.IncDecStatement:
+		return evalIncDecStatement(node, env)
+
+	case *ast.ForStatement:
+		return evalForStatement(node, env)
+
 	}
 
 	return &object.Null{}
@@ -153,4 +159,37 @@ func isTruthy(obj object.Object) bool {
 	}
 
 	return false
+}
+
+func evalIncDecStatement(stmt *ast.IncDecStatement, env *Environment) object.Object {
+
+	v, _ := env.Get(stmt.Name)
+	iv := v.(*object.Integer).Value
+
+	if stmt.Operator == "++" {
+		iv++
+	} else {
+		iv--
+	}
+
+	obj := &object.Integer{Value: iv}
+	env.Set(stmt.Name, obj)
+	return obj
+}
+
+func evalForStatement(stmt *ast.ForStatement, env *Environment) object.Object {
+
+	Eval(stmt.Init, env)
+
+	for {
+		cond := Eval(stmt.Condition, env)
+		if !isTruthy(cond) {
+			break
+		}
+
+		Eval(stmt.Body, env)
+		Eval(stmt.Post, env)
+	}
+
+	return &object.Null{}
 }

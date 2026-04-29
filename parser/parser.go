@@ -75,6 +75,10 @@ func (p *Parser) ParseProgram() *ast.Program {
 
 	for p.curToken.Type != lexer.EOF {
 
+		for p.curToken.Type == lexer.SEMICOLON {
+			p.nextToken()
+		}
+
 		stmt := p.parseStatement()
 		if stmt != nil {
 			program.Statements = append(program.Statements, stmt)
@@ -93,6 +97,9 @@ func (p *Parser) parseStatement() ast.Statement {
 	case lexer.IF:
 		return p.parseIfStatement()
 
+	case lexer.FOR:
+		return p.parseForStatement()
+
 	case lexer.IDENT:
 
 		switch p.peekToken.Type {
@@ -102,6 +109,10 @@ func (p *Parser) parseStatement() ast.Statement {
 
 		case lexer.ASSIGN:
 			return p.parseAssignStatement()
+
+		case lexer.INC, lexer.DEC:
+			return p.parseIncDecStatement()
+
 		}
 	}
 
@@ -308,4 +319,51 @@ func (p *Parser) parseBlockStatement() *ast.BlockStatement {
 	}
 
 	return block
+}
+
+func (p *Parser) parseIncDecStatement() *ast.IncDecStatement {
+	stmt := &ast.IncDecStatement{
+		Name: p.curToken.Literal,
+	}
+
+	p.nextToken() // ++ or --
+
+	stmt.Operator = p.curToken.Literal
+
+	return stmt
+}
+
+func (p *Parser) parseForStatement() *ast.ForStatement {
+
+	stmt := &ast.ForStatement{}
+
+	p.nextToken() // init first token
+	stmt.Init = p.parseStatement()
+
+	if p.peekToken.Type != lexer.SEMICOLON {
+		return stmt
+	}
+
+	p.nextToken() // ;
+	p.nextToken() // condition first token
+	stmt.Condition = p.parseExpression(LOWEST)
+
+	if p.peekToken.Type != lexer.SEMICOLON {
+		return stmt
+	}
+
+	p.nextToken() // ;
+	p.nextToken() // post first token
+	stmt.Post = p.parseStatement()
+
+	if p.peekToken.Type != lexer.LBRACE {
+		return stmt
+	}
+
+	p.nextToken() // {
+	p.nextToken() // first stmt in body
+
+	stmt.Body = p.parseBlockStatement()
+
+	return stmt
 }
