@@ -389,3 +389,38 @@ func testAssignStatement(t *testing.T, s ast.Statement, name string, value strin
 
 	return true
 }
+
+func TestBuiltinFunctionStatement(t *testing.T) {
+	input := `print(x)`
+
+	l := lexer.New(input)
+	p := New(l)
+	program := p.ParseProgram()
+	if len(program.Statements) != 1 {
+		t.Fatalf("program.Statements does not contain 1 statement. got=%d",
+			len(program.Statements))
+	}
+
+	stmt := program.Statements[0]
+
+	if exp, ok := stmt.(*ast.ExpressionStatement); !ok {
+		t.Fatalf("stmt not *ast.ExpressionStatement. got=%T", stmt)
+	} else {
+		if callExp, ok := exp.Expression.(*ast.CallExpression); !ok {
+			t.Fatalf("exp.Expression not *ast.CallExpression. got=%T", exp.Expression)
+		} else {
+			if !testIdentifier(t, callExp.Function, "print") {
+				t.Fatalf("Function not as expected")
+			}
+
+			if len(callExp.Arguments) != 1 {
+				t.Fatalf("callExp.Arguments does not contain 1 argument. got=%d",
+					len(callExp.Arguments))
+			}
+
+			if !testIdentifier(t, callExp.Arguments[0], "x") {
+				t.Fatalf("Argument not as expected")
+			}
+		}
+	}
+}

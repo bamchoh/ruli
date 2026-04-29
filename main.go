@@ -8,7 +8,7 @@ import (
 )
 
 func main() {
-	input := `x := 0; y := 20;for i := 0; i < 5; i++ { x = x + 1 }`
+	input := `x := 0; y := 20;for i := 0; i < 5; i++ { print(x); x = x + i }`
 
 	l := lexer.New(input)
 	p := parser.New(l)

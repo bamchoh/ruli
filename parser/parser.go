@@ -12,6 +12,7 @@ const (
 	LESSGREATER
 	SUM
 	PRODUCT
+	CALL
 )
 
 var precedences = map[lexer.TokenType]int{
@@ -23,6 +24,7 @@ var precedences = map[lexer.TokenType]int{
 	lexer.MINUS:    SUM,
 	lexer.ASTERISK: PRODUCT,
 	lexer.SLASH:    PRODUCT,
+	lexer.LPAREN:   CALL,
 }
 
 type (
@@ -58,6 +60,7 @@ func New(l *lexer.Lexer) *Parser {
 	p.registerInfix(lexer.NOT_EQ, p.parseInfixExpression)
 	p.registerInfix(lexer.LT, p.parseInfixExpression)
 	p.registerInfix(lexer.GT, p.parseInfixExpression)
+	p.registerInfix(lexer.LPAREN, p.parseCallExpression)
 
 	p.nextToken()
 	p.nextToken()
@@ -114,9 +117,16 @@ func (p *Parser) parseStatement() ast.Statement {
 			return p.parseIncDecStatement()
 
 		}
+
 	}
 
-	return nil
+	return p.parseExpressionStatement()
+}
+
+func (p *Parser) parseExpressionStatement() *ast.ExpressionStatement {
+	stmt := &ast.ExpressionStatement{}
+	stmt.Expression = p.parseExpression(LOWEST)
+	return stmt
 }
 
 func (p *Parser) parseVarDeclStatement() *ast.VarDeclStatement {
@@ -298,6 +308,8 @@ func (p *Parser) parseIfStatement() *ast.IfStatement {
 			return stmt
 		}
 
+		p.nextToken() // {
+		p.nextToken() // {
 		stmt.Alternative = p.parseBlockStatement()
 	}
 
@@ -366,4 +378,39 @@ func (p *Parser) parseForStatement() *ast.ForStatement {
 	stmt.Body = p.parseBlockStatement()
 
 	return stmt
+}
+
+func (p *Parser) parseCallExpression(function ast.Expression) ast.Expression {
+
+	exp := &ast.CallExpression{
+		Function: function,
+	}
+
+	exp.Arguments = p.parseExpressionList(lexer.RPAREN)
+
+	return exp
+}
+
+func (p *Parser) parseExpressionList(end lexer.TokenType) []ast.Expression {
+	var list []ast.Expression
+
+	if p.peekToken.Type == end {
+		p.nextToken()
+		return list
+	}
+
+	p.nextToken()
+	list = append(list, p.parseExpression(LOWEST))
+
+	for p.peekToken.Type == lexer.COMMA {
+		p.nextToken()
+		p.nextToken()
+		list = append(list, p.parseExpression(LOWEST))
+	}
+
+	if p.peekToken.Type == end {
+		p.nextToken()
+	}
+
+	return list
 }

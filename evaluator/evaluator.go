@@ -1,9 +1,21 @@
 package evaluator
 
 import (
+	"fmt"
 	"ruli/ast"
 	"ruli/object"
 )
+
+var builtins = map[string]*object.Builtin{
+	"print": {
+		Fn: func(args ...object.Object) object.Object {
+			for _, arg := range args {
+				fmt.Println(arg.Inspect())
+			}
+			return &object.Null{}
+		},
+	},
+}
 
 type Environment struct {
 	store map[string]object.Object
@@ -45,6 +57,10 @@ func Eval(node ast.Node, env *Environment) object.Object {
 		return &object.Integer{Value: node.Value}
 
 	case *ast.Identifier:
+		if b, ok := builtins[node.Value]; ok {
+			return b
+		}
+
 		v, ok := env.Get(node.Value)
 		if !ok {
 			return &object.Null{}
@@ -65,6 +81,12 @@ func Eval(node ast.Node, env *Environment) object.Object {
 
 	case *ast.ForStatement:
 		return evalForStatement(node, env)
+
+	case *ast.CallExpression:
+		return evalCallExpression(node, env)
+
+	case *ast.ExpressionStatement:
+		return Eval(node.Expression, env)
 
 	}
 
@@ -189,6 +211,22 @@ func evalForStatement(stmt *ast.ForStatement, env *Environment) object.Object {
 
 		Eval(stmt.Body, env)
 		Eval(stmt.Post, env)
+	}
+
+	return &object.Null{}
+}
+
+func evalCallExpression(node *ast.CallExpression, env *Environment) object.Object {
+
+	function := Eval(node.Function, env)
+
+	var args []object.Object
+	for _, arg := range node.Arguments {
+		args = append(args, Eval(arg, env))
+	}
+
+	if builtin, ok := function.(*object.Builtin); ok {
+		return builtin.Fn(args...)
 	}
 
 	return &object.Null{}

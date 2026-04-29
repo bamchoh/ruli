@@ -13,6 +13,7 @@ func TestAssignStatement(t *testing.T) {
 		y := x / 2
 	}
 	for i := 0; i < 5; i++ { x = i }
+	print(x)
 	`
 
 	l := New(input)
@@ -78,6 +79,10 @@ func TestAssignStatement(t *testing.T) {
 		{ASSIGN, "="},
 		{IDENT, "i"},
 		{RBRACE, "}"},
+		{IDENT, "print"},
+		{LPAREN, "("},
+		{IDENT, "x"},
+		{RPAREN, ")"},
 		{EOF, ""},
 	}
 

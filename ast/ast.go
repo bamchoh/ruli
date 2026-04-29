@@ -159,3 +159,27 @@ func (fs *ForStatement) statementNode() {}
 func (fs *ForStatement) String() string {
 	return "for"
 }
+
+type ExpressionStatement struct {
+	Expression Expression
+}
+
+func (es *ExpressionStatement) statementNode() {}
+
+func (es *ExpressionStatement) String() string {
+	if es.Expression != nil {
+		return es.Expression.String()
+	}
+	return ""
+}
+
+type CallExpression struct {
+	Function  Expression
+	Arguments []Expression
+}
+
+func (ce *CallExpression) expressionNode() {}
+
+func (ce *CallExpression) String() string {
+	return "call"
+}

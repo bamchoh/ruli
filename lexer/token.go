@@ -43,6 +43,9 @@ const (
 
 	LBRACE = "{"
 	RBRACE = "}"
+	LPAREN = "("
+	RPAREN = ")"
+	COMMA  = ","
 
 	INC = "++"
 	DEC = "--"
