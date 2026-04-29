@@ -61,13 +61,20 @@ func (l *Lexer) NextToken() Token {
 			tok = Token{Type: COLON, Literal: string(l.ch)}
 		}
 
+	case '{':
+		tok = Token{Type: LBRACE, Literal: "{"}
+
+	case '}':
+		tok = Token{Type: RBRACE, Literal: "}"}
+
 	case 0:
 		tok = Token{Type: EOF, Literal: ""}
 
 	default:
 		if isLetter(l.ch) {
 			lit := l.readIdentifier()
-			tok = Token{Type: IDENT, Literal: lit}
+			tok.Type = LookupIdent(lit)
+			tok = Token{Type: tok.Type, Literal: lit}
 			return tok
 		} else if isDigit(l.ch) {
 			return Token{Type: INT_LIT, Literal: l.readNumber()}

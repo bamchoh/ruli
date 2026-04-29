@@ -7,6 +7,11 @@ func TestAssignStatement(t *testing.T) {
 	y := 10 + 20 - 30 * 40 / 50
 	z : INT = 10
 	a = 10
+	if x > 5 {
+		y := x * 2
+	} else {
+		y := x / 2
+	}
 	`
 
 	l := New(input)
@@ -37,6 +42,25 @@ func TestAssignStatement(t *testing.T) {
 		{IDENT, "a"},
 		{ASSIGN, "="},
 		{INT_LIT, "10"},
+		{IF, "if"},
+		{IDENT, "x"},
+		{GT, ">"},
+		{INT_LIT, "5"},
+		{LBRACE, "{"},
+		{IDENT, "y"},
+		{DECLARE, ":="},
+		{IDENT, "x"},
+		{ASTERISK, "*"},
+		{INT_LIT, "2"},
+		{RBRACE, "}"},
+		{ELSE, "else"},
+		{LBRACE, "{"},
+		{IDENT, "y"},
+		{DECLARE, ":="},
+		{IDENT, "x"},
+		{SLASH, "/"},
+		{INT_LIT, "2"},
+		{RBRACE, "}"},
 		{EOF, ""},
 	}
 

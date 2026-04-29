@@ -90,6 +90,9 @@ func (p *Parser) parseStatement() ast.Statement {
 
 	switch p.curToken.Type {
 
+	case lexer.IF:
+		return p.parseIfStatement()
+
 	case lexer.IDENT:
 
 		switch p.peekToken.Type {
@@ -247,4 +250,62 @@ func (p *Parser) registerPrefix(tokenType lexer.TokenType, fn prefixParseFn) {
 
 func (p *Parser) registerInfix(tokenType lexer.TokenType, fn infixParseFn) {
 	p.infixParseFns[tokenType] = fn
+}
+
+func (p *Parser) parseIfStatement() *ast.IfStatement {
+
+	stmt := &ast.IfStatement{}
+
+	p.nextToken() // condition first token
+
+	stmt.Condition = p.parseExpression(LOWEST)
+
+	if p.peekToken.Type != lexer.LBRACE {
+		return stmt
+	}
+
+	p.nextToken() // {
+	p.nextToken() // first stmt inside block
+
+	stmt.Consequence = p.parseBlockStatement()
+
+	if p.peekToken.Type == lexer.ELSE {
+		p.nextToken() // else
+
+		if p.peekToken.Type == lexer.IF {
+			p.nextToken()
+
+			stmt.Alternative = &ast.BlockStatement{
+				Statements: []ast.Statement{
+					p.parseIfStatement(),
+				},
+			}
+			return stmt
+		}
+
+		if p.peekToken.Type != lexer.LBRACE {
+			return stmt
+		}
+
+		stmt.Alternative = p.parseBlockStatement()
+	}
+
+	return stmt
+}
+
+func (p *Parser) parseBlockStatement() *ast.BlockStatement {
+
+	block := &ast.BlockStatement{}
+
+	for p.curToken.Type != lexer.RBRACE && p.curToken.Type != lexer.EOF {
+
+		stmt := p.parseStatement()
+		if stmt != nil {
+			block.Statements = append(block.Statements, stmt)
+		}
+
+		p.nextToken()
+	}
+
+	return block
 }

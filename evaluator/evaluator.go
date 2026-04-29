@@ -53,6 +53,13 @@ func Eval(node ast.Node, env *Environment) object.Object {
 
 	case *ast.BinaryExpression:
 		return evalBinaryExpression(node, env)
+
+	case *ast.IfStatement:
+		return evalIfStatement(node, env)
+
+	case *ast.BlockStatement:
+		return evalBlockStatement(node, env)
+
 	}
 
 	return &object.Null{}
@@ -107,4 +114,43 @@ func evalIntegerBinaryExpression(operator string, left, right object.Object) obj
 	}
 
 	return &object.Null{}
+}
+
+func evalBlockStatement(block *ast.BlockStatement, env *Environment) object.Object {
+	var result object.Object = &object.Null{}
+
+	for _, stmt := range block.Statements {
+		result = Eval(stmt, env)
+	}
+
+	return result
+}
+
+func evalIfStatement(stmt *ast.IfStatement, env *Environment) object.Object {
+
+	cond := Eval(stmt.Condition, env)
+
+	if isTruthy(cond) {
+		return Eval(stmt.Consequence, env)
+	}
+
+	if stmt.Alternative != nil {
+		return Eval(stmt.Alternative, env)
+	}
+
+	return &object.Null{}
+}
+
+func isTruthy(obj object.Object) bool {
+
+	switch v := obj.(type) {
+	case *object.Boolean:
+		return v.Value
+	case *object.Integer:
+		return v.Value != 0
+	case *object.Null:
+		return false
+	}
+
+	return false
 }

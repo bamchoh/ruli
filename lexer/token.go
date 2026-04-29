@@ -37,4 +37,22 @@ const (
 	NOT_EQ = "!="
 	LT     = "<"
 	GT     = ">"
+
+	IF   = "IF"
+	ELSE = "ELSE"
+
+	LBRACE = "{"
+	RBRACE = "}"
 )
+
+var keywords = map[string]TokenType{
+	"if":   IF,
+	"else": ELSE,
+}
+
+func LookupIdent(ident string) TokenType {
+	if tok, ok := keywords[ident]; ok {
+		return tok
+	}
+	return IDENT
+}

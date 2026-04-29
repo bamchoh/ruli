@@ -1,6 +1,9 @@
 package ast
 
-import "fmt"
+import (
+	"bytes"
+	"fmt"
+)
 
 type Node interface {
 	String() string
@@ -91,4 +94,44 @@ type BasicType struct {
 func (b *BasicType) typeNode() {}
 func (b *BasicType) String() string {
 	return b.Name
+}
+
+type BlockStatement struct {
+	Statements []Statement
+}
+
+func (bs *BlockStatement) statementNode() {}
+
+func (bs *BlockStatement) String() string {
+	var out bytes.Buffer
+
+	for _, s := range bs.Statements {
+		out.WriteString(s.String())
+	}
+
+	return out.String()
+}
+
+type IfStatement struct {
+	Condition   Expression
+	Consequence *BlockStatement
+	Alternative *BlockStatement
+}
+
+func (ie *IfStatement) statementNode() {}
+
+func (ie *IfStatement) String() string {
+	var out bytes.Buffer
+
+	out.WriteString("if")
+	out.WriteString(ie.Condition.String())
+	out.WriteString(" ")
+	out.WriteString(ie.Consequence.String())
+
+	if ie.Alternative != nil {
+		out.WriteString("else ")
+		out.WriteString(ie.Alternative.String())
+	}
+
+	return out.String()
 }
