@@ -8,10 +8,10 @@ import (
 )
 
 func main() {
-	input := `
-x := 10
-x = x + 20
-y = x * 2`
+	input := `x := 10
+y := x > 5
+z := x == 10
+w := x < 3`
 
 	l := lexer.New(input)
 	p := parser.New(l)
@@ -20,6 +20,8 @@ y = x * 2`
 	env := evaluator.NewEnvironment()
 	evaluator.Eval(program, env)
 
-	fmt.Println(env.Get("x"))
-	fmt.Println(env.Get("y"))
+	for _, name := range []string{"x", "y", "z", "w"} {
+		v, _ := env.Get(name)
+		fmt.Println(name, "=", v.Inspect(), v.Type())
+	}
 }

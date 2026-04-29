@@ -7,12 +7,18 @@ import (
 )
 
 const (
-	LOWEST  = iota
-	SUM     // + -
-	PRODUCT // * /
+	LOWEST = iota
+	EQUALS
+	LESSGREATER
+	SUM
+	PRODUCT
 )
 
 var precedences = map[lexer.TokenType]int{
+	lexer.EQ:       EQUALS,
+	lexer.NOT_EQ:   EQUALS,
+	lexer.LT:       LESSGREATER,
+	lexer.GT:       LESSGREATER,
 	lexer.PLUS:     SUM,
 	lexer.MINUS:    SUM,
 	lexer.ASTERISK: PRODUCT,
@@ -48,6 +54,10 @@ func New(l *lexer.Lexer) *Parser {
 	p.registerInfix(lexer.MINUS, p.parseInfixExpression)
 	p.registerInfix(lexer.ASTERISK, p.parseInfixExpression)
 	p.registerInfix(lexer.SLASH, p.parseInfixExpression)
+	p.registerInfix(lexer.EQ, p.parseInfixExpression)
+	p.registerInfix(lexer.NOT_EQ, p.parseInfixExpression)
+	p.registerInfix(lexer.LT, p.parseInfixExpression)
+	p.registerInfix(lexer.GT, p.parseInfixExpression)
 
 	p.nextToken()
 	p.nextToken()

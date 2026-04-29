@@ -32,4 +32,9 @@ const (
 	INT  = "INT"
 	REAL = "REAL"
 	BOOL = "BOOL"
+
+	EQ     = "=="
+	NOT_EQ = "!="
+	LT     = "<"
+	GT     = ">"
 )

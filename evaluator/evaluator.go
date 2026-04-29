@@ -2,28 +2,29 @@ package evaluator
 
 import (
 	"ruli/ast"
+	"ruli/object"
 )
 
 type Environment struct {
-	store map[string]interface{}
+	store map[string]object.Object
 }
 
 func NewEnvironment() *Environment {
 	return &Environment{
-		store: make(map[string]interface{}),
+		store: make(map[string]object.Object),
 	}
 }
 
-func (e *Environment) Get(name string) (interface{}, bool) {
+func (e *Environment) Get(name string) (object.Object, bool) {
 	v, ok := e.store[name]
 	return v, ok
 }
 
-func (e *Environment) Set(name string, val interface{}) {
+func (e *Environment) Set(name string, val object.Object) {
 	e.store[name] = val
 }
 
-func Eval(node ast.Node, env *Environment) interface{} {
+func Eval(node ast.Node, env *Environment) object.Object {
 
 	switch node := node.(type) {
 
@@ -41,21 +42,24 @@ func Eval(node ast.Node, env *Environment) interface{} {
 		return val
 
 	case *ast.IntegerLiteral:
-		return node.Value
+		return &object.Integer{Value: node.Value}
 
 	case *ast.Identifier:
-		v, _ := env.Get(node.Value)
+		v, ok := env.Get(node.Value)
+		if !ok {
+			return &object.Null{}
+		}
 		return v
 
 	case *ast.BinaryExpression:
 		return evalBinaryExpression(node, env)
 	}
 
-	return nil
+	return &object.Null{}
 }
 
-func evalProgram(program *ast.Program, env *Environment) interface{} {
-	var result interface{}
+func evalProgram(program *ast.Program, env *Environment) object.Object {
+	var result object.Object = &object.Null{}
 
 	for _, stmt := range program.Statements {
 		result = Eval(stmt, env)
@@ -64,21 +68,43 @@ func evalProgram(program *ast.Program, env *Environment) interface{} {
 	return result
 }
 
-func evalBinaryExpression(be *ast.BinaryExpression, env *Environment) interface{} {
+func evalBinaryExpression(be *ast.BinaryExpression, env *Environment) object.Object {
 
-	left := Eval(be.Left, env).(int)
-	right := Eval(be.Right, env).(int)
+	left := Eval(be.Left, env)
+	right := Eval(be.Right, env)
 
-	switch be.Operator {
-	case "+":
-		return left + right
-	case "-":
-		return left - right
-	case "*":
-		return left * right
-	case "/":
-		return left / right
+	switch {
+	case left.Type() == object.INTEGER_OBJ && right.Type() == object.INTEGER_OBJ:
+		return evalIntegerBinaryExpression(be.Operator, left, right)
 	}
 
-	return nil
+	return &object.Null{}
+}
+
+func evalIntegerBinaryExpression(operator string, left, right object.Object) object.Object {
+
+	lv := left.(*object.Integer).Value
+	rv := right.(*object.Integer).Value
+
+	switch operator {
+	case "+":
+		return &object.Integer{Value: lv + rv}
+	case "-":
+		return &object.Integer{Value: lv - rv}
+	case "*":
+		return &object.Integer{Value: lv * rv}
+	case "/":
+		return &object.Integer{Value: lv / rv}
+
+	case ">":
+		return &object.Boolean{Value: lv > rv}
+	case "<":
+		return &object.Boolean{Value: lv < rv}
+	case "==":
+		return &object.Boolean{Value: lv == rv}
+	case "!=":
+		return &object.Boolean{Value: lv != rv}
+	}
+
+	return &object.Null{}
 }

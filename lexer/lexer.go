@@ -20,7 +20,29 @@ func (l *Lexer) NextToken() Token {
 	switch l.ch {
 
 	case '=':
-		tok = Token{Type: ASSIGN, Literal: "="}
+		if l.peekChar() == '=' {
+			ch := l.ch
+			l.readChar()
+			tok = Token{Type: EQ, Literal: string(ch) + string(l.ch)}
+		} else {
+			tok = Token{Type: ASSIGN, Literal: "="}
+		}
+
+	case '!':
+		if l.peekChar() == '=' {
+			ch := l.ch
+			l.readChar()
+			tok = Token{Type: NOT_EQ, Literal: string(ch) + string(l.ch)}
+		} else {
+			tok = Token{Type: ILLEGAL, Literal: "!"}
+		}
+
+	case '<':
+		tok = Token{Type: LT, Literal: "<"}
+
+	case '>':
+		tok = Token{Type: GT, Literal: ">"}
+
 	case '+':
 		tok = Token{Type: PLUS, Literal: "+"}
 	case '-':
