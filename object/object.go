@@ -1,6 +1,36 @@
 package object
 
-import "fmt"
+import (
+	"fmt"
+	"ruli/ast"
+)
+
+type Environment struct {
+	store map[string]Object
+	outer *Environment
+}
+
+func NewEnvironment() *Environment {
+	return &Environment{store: make(map[string]Object)}
+}
+
+func NewEnclosedEnvironment(outer *Environment) *Environment {
+	env := NewEnvironment()
+	env.outer = outer
+	return env
+}
+
+func (e *Environment) Get(name string) (Object, bool) {
+	v, ok := e.store[name]
+	if !ok && e.outer != nil {
+		return e.outer.Get(name)
+	}
+	return v, ok
+}
+
+func (e *Environment) Set(name string, val Object) {
+	e.store[name] = val
+}
 
 type ObjectType string
 
@@ -16,6 +46,8 @@ const (
 	NULL_OBJ     = "NULL"
 	BREAK_OBJ    = "BREAK"
 	CONTINUE_OBJ = "CONTINUE"
+	FUNCTION_OBJ = "FUNCTION"
+	RETURN_OBJ   = "RETURN"
 )
 
 type Integer struct {
@@ -76,3 +108,29 @@ type ContinueSignal struct{}
 
 func (c *ContinueSignal) Type() ObjectType { return CONTINUE_OBJ }
 func (c *ContinueSignal) Inspect() string  { return "continue" }
+
+type Function struct {
+	Parameters []ast.Parameter
+	Body       *ast.BlockStatement
+	Env        *Environment
+}
+
+func (f *Function) Type() ObjectType {
+	return FUNCTION_OBJ
+}
+
+func (f *Function) Inspect() string {
+	return "function"
+}
+
+type ReturnValue struct {
+	Value Object
+}
+
+func (rv *ReturnValue) Type() ObjectType {
+	return RETURN_OBJ
+}
+
+func (rv *ReturnValue) Inspect() string {
+	return rv.Value.Inspect()
+}

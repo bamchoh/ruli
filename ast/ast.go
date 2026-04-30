@@ -199,3 +199,31 @@ func (cs *ContinueStatement) statementNode() {}
 func (cs *ContinueStatement) String() string {
 	return "continue"
 }
+
+type Parameter struct {
+	Name string
+	Type string
+}
+
+type FunctionStatement struct {
+	Name       string
+	Parameters []Parameter
+	ReturnType string
+	Body       *BlockStatement
+}
+
+func (fs *FunctionStatement) statementNode() {}
+
+func (fs *FunctionStatement) String() string {
+	return "func " + fs.Name
+}
+
+type ReturnStatement struct {
+	Value Expression
+}
+
+func (rs *ReturnStatement) statementNode() {}
+
+func (rs *ReturnStatement) String() string {
+	return "return"
+}

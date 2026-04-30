@@ -17,26 +17,7 @@ var builtins = map[string]*object.Builtin{
 	},
 }
 
-type Environment struct {
-	store map[string]object.Object
-}
-
-func NewEnvironment() *Environment {
-	return &Environment{
-		store: make(map[string]object.Object),
-	}
-}
-
-func (e *Environment) Get(name string) (object.Object, bool) {
-	v, ok := e.store[name]
-	return v, ok
-}
-
-func (e *Environment) Set(name string, val object.Object) {
-	e.store[name] = val
-}
-
-func Eval(node ast.Node, env *Environment) object.Object {
+func Eval(node ast.Node, env *object.Environment) object.Object {
 
 	switch node := node.(type) {
 
@@ -94,12 +75,24 @@ func Eval(node ast.Node, env *Environment) object.Object {
 	case *ast.ContinueStatement:
 		return &object.ContinueSignal{}
 
+	case *ast.FunctionStatement:
+		fn := &object.Function{
+			Parameters: node.Parameters,
+			Body:       node.Body,
+			Env:        env,
+		}
+		env.Set(node.Name, fn)
+		return fn
+
+	case *ast.ReturnStatement:
+		val := Eval(node.Value, env)
+		return &object.ReturnValue{Value: val}
 	}
 
 	return &object.Null{}
 }
 
-func evalProgram(program *ast.Program, env *Environment) object.Object {
+func evalProgram(program *ast.Program, env *object.Environment) object.Object {
 	var result object.Object = &object.Null{}
 
 	for _, stmt := range program.Statements {
@@ -109,7 +102,7 @@ func evalProgram(program *ast.Program, env *Environment) object.Object {
 	return result
 }
 
-func evalBinaryExpression(be *ast.BinaryExpression, env *Environment) object.Object {
+func evalBinaryExpression(be *ast.BinaryExpression, env *object.Environment) object.Object {
 
 	left := Eval(be.Left, env)
 	right := Eval(be.Right, env)
@@ -150,7 +143,7 @@ func evalIntegerBinaryExpression(operator string, left, right object.Object) obj
 	return &object.Null{}
 }
 
-func evalBlockStatement(block *ast.BlockStatement, env *Environment) object.Object {
+func evalBlockStatement(block *ast.BlockStatement, env *object.Environment) object.Object {
 	var result object.Object = &object.Null{}
 
 	for _, stmt := range block.Statements {
@@ -158,7 +151,7 @@ func evalBlockStatement(block *ast.BlockStatement, env *Environment) object.Obje
 
 		if result != nil {
 			rt := result.Type()
-			if rt == object.BREAK_OBJ || rt == object.CONTINUE_OBJ {
+			if rt == object.BREAK_OBJ || rt == object.CONTINUE_OBJ || rt == object.RETURN_OBJ {
 				return result
 			}
 		}
@@ -167,7 +160,7 @@ func evalBlockStatement(block *ast.BlockStatement, env *Environment) object.Obje
 	return result
 }
 
-func evalIfStatement(stmt *ast.IfStatement, env *Environment) object.Object {
+func evalIfStatement(stmt *ast.IfStatement, env *object.Environment) object.Object {
 
 	cond := Eval(stmt.Condition, env)
 
@@ -196,7 +189,7 @@ func isTruthy(obj object.Object) bool {
 	return false
 }
 
-func evalIncDecStatement(stmt *ast.IncDecStatement, env *Environment) object.Object {
+func evalIncDecStatement(stmt *ast.IncDecStatement, env *object.Environment) object.Object {
 
 	v, _ := env.Get(stmt.Name)
 	iv := v.(*object.Integer).Value
@@ -212,7 +205,7 @@ func evalIncDecStatement(stmt *ast.IncDecStatement, env *Environment) object.Obj
 	return obj
 }
 
-func evalForStatement(stmt *ast.ForStatement, env *Environment) object.Object {
+func evalForStatement(stmt *ast.ForStatement, env *object.Environment) object.Object {
 
 	Eval(stmt.Init, env)
 
@@ -228,6 +221,8 @@ func evalForStatement(stmt *ast.ForStatement, env *Environment) object.Object {
 			switch result.Type() {
 			case object.BREAK_OBJ:
 				return &object.Null{}
+			case object.RETURN_OBJ:
+				return result
 
 			case object.CONTINUE_OBJ:
 				Eval(stmt.Post, env)
@@ -241,7 +236,7 @@ func evalForStatement(stmt *ast.ForStatement, env *Environment) object.Object {
 	return &object.Null{}
 }
 
-func evalCallExpression(node *ast.CallExpression, env *Environment) object.Object {
+func evalCallExpression(node *ast.CallExpression, env *object.Environment) object.Object {
 
 	function := Eval(node.Function, env)
 
@@ -250,9 +245,33 @@ func evalCallExpression(node *ast.CallExpression, env *Environment) object.Objec
 		args = append(args, Eval(arg, env))
 	}
 
-	if builtin, ok := function.(*object.Builtin); ok {
-		return builtin.Fn(args...)
+	switch fn := function.(type) {
+
+	case *object.Builtin:
+		return fn.Fn(args...)
+
+	case *object.Function:
+		return applyFunction(fn, args)
 	}
 
 	return &object.Null{}
+}
+
+func applyFunction(fn *object.Function, args []object.Object) object.Object {
+
+	extendedEnv := object.NewEnclosedEnvironment(fn.Env)
+
+	for i, param := range fn.Parameters {
+		if i < len(args) {
+			extendedEnv.Set(param.Name, args[i])
+		}
+	}
+
+	result := Eval(fn.Body, extendedEnv)
+
+	if rv, ok := result.(*object.ReturnValue); ok {
+		return rv.Value
+	}
+
+	return result
 }

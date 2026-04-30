@@ -109,6 +109,12 @@ func (p *Parser) parseStatement() ast.Statement {
 	case lexer.CONTINUE:
 		return &ast.ContinueStatement{}
 
+	case lexer.FUNC:
+		return p.parseFunctionStatement()
+
+	case lexer.RETURN:
+		return p.parseReturnStatement()
+
 	case lexer.IDENT:
 
 		switch p.peekToken.Type {
@@ -419,4 +425,82 @@ func (p *Parser) parseExpressionList(end lexer.TokenType) []ast.Expression {
 	}
 
 	return list
+}
+
+func (p *Parser) parseReturnStatement() *ast.ReturnStatement {
+	stmt := &ast.ReturnStatement{}
+
+	p.nextToken()
+	stmt.Value = p.parseExpression(LOWEST)
+
+	return stmt
+}
+
+func (p *Parser) parseFunctionStatement() *ast.FunctionStatement {
+
+	stmt := &ast.FunctionStatement{}
+
+	p.nextToken() // function name
+	stmt.Name = p.curToken.Literal
+
+	if p.peekToken.Type != lexer.LPAREN {
+		return stmt
+	}
+
+	p.nextToken() // (
+	stmt.Parameters = p.parseFunctionParameters()
+
+	// 戻り値型省略可
+	if p.peekToken.Type == lexer.IDENT {
+		p.nextToken()
+		stmt.ReturnType = p.curToken.Literal
+	}
+
+	if p.peekToken.Type != lexer.LBRACE {
+		return stmt
+	}
+
+	p.nextToken() // {
+	p.nextToken() // first stmt in body
+
+	stmt.Body = p.parseBlockStatement()
+
+	return stmt
+}
+
+func (p *Parser) parseFunctionParameters() []ast.Parameter {
+	var params []ast.Parameter
+
+	if p.peekToken.Type == lexer.RPAREN {
+		p.nextToken()
+		return params
+	}
+
+	for {
+		p.nextToken() // param name
+
+		param := ast.Parameter{
+			Name: p.curToken.Literal,
+		}
+
+		if p.peekToken.Type == lexer.COLON {
+			p.nextToken() // :
+			p.nextToken() // type
+			param.Type = p.curToken.Literal
+		}
+
+		params = append(params, param)
+
+		if p.peekToken.Type == lexer.COMMA {
+			p.nextToken()
+			continue
+		}
+
+		if p.peekToken.Type == lexer.RPAREN {
+			p.nextToken()
+			break
+		}
+	}
+
+	return params
 }

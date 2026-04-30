@@ -424,3 +424,134 @@ func TestBuiltinFunctionStatement(t *testing.T) {
 		}
 	}
 }
+
+func TestFunction1Statement(t *testing.T) {
+	input := `func add(a: INT, b: INT) INT {
+		return a + b
+	}`
+
+	l := lexer.New(input)
+	p := New(l)
+	program := p.ParseProgram()
+
+	if len(program.Statements) != 1 {
+		t.Fatalf("program.Statements does not contain 1 statement. got=%d",
+			len(program.Statements))
+	}
+
+	stmt := program.Statements[0]
+
+	if funcStmt, ok := stmt.(*ast.FunctionStatement); !ok {
+		t.Fatalf("stmt not *ast.FunctionStatement. got=%T", stmt)
+	} else {
+		if funcStmt.Name != "add" {
+			t.Fatalf("Function name not as expected. got=%s", funcStmt.Name)
+		}
+
+		if len(funcStmt.Parameters) != 2 {
+			t.Fatalf("funcStmt.Parameters does not contain 2 parameters. got=%d",
+				len(funcStmt.Parameters))
+		}
+
+		param1 := funcStmt.Parameters[0]
+		if param1.Name != "a" || param1.Type != "INT" {
+			t.Fatalf("Parameter 1 not as expected. got=%s %s", param1.Name, param1.Type)
+		}
+
+		param2 := funcStmt.Parameters[1]
+		if param2.Name != "b" || param2.Type != "INT" {
+			t.Fatalf("Parameter 2 not as expected. got=%s %s", param2.Name, param2.Type)
+		}
+
+		if funcStmt.ReturnType != "INT" {
+			t.Fatalf("Return type not as expected. got=%s", funcStmt.ReturnType)
+		}
+
+		if len(funcStmt.Body.Statements) != 1 {
+			t.Fatalf("funcStmt.Body.Statements does not contain 1 statement. got=%d",
+				len(funcStmt.Body.Statements))
+		}
+
+		bodyStmt := funcStmt.Body.Statements[0]
+
+		if returnStmt, ok := bodyStmt.(*ast.ReturnStatement); !ok {
+			t.Fatalf("bodyStmt not *ast.ReturnStatement. got=%T", bodyStmt)
+		} else {
+			if !testInfixExpression(t, returnStmt.Value, "a", "+", "b") {
+				t.Fatalf("Return value not as expected")
+			}
+		}
+	}
+}
+
+func TestFunction2Statement(t *testing.T) {
+	input := `func calc_and_dump(a: INT, b: INT) {
+		print(a + b)
+	}`
+
+	l := lexer.New(input)
+	p := New(l)
+	program := p.ParseProgram()
+
+	if len(program.Statements) != 1 {
+		t.Fatalf("program.Statements does not contain 1 statement. got=%d",
+			len(program.Statements))
+	}
+
+	stmt := program.Statements[0]
+
+	if funcStmt, ok := stmt.(*ast.FunctionStatement); !ok {
+		t.Fatalf("stmt not *ast.FunctionStatement. got=%T", stmt)
+	} else {
+		if funcStmt.Name != "calc_and_dump" {
+			t.Fatalf("Function name not as expected. got=%s", funcStmt.Name)
+		}
+
+		if len(funcStmt.Parameters) != 2 {
+			t.Fatalf("funcStmt.Parameters does not contain 2 parameters. got=%d",
+				len(funcStmt.Parameters))
+		}
+
+		param1 := funcStmt.Parameters[0]
+		if param1.Name != "a" || param1.Type != "INT" {
+			t.Fatalf("Parameter 1 not as expected. got=%s %s", param1.Name, param1.Type)
+		}
+
+		param2 := funcStmt.Parameters[1]
+		if param2.Name != "b" || param2.Type != "INT" {
+			t.Fatalf("Parameter 2 not as expected. got=%s %s", param2.Name, param2.Type)
+		}
+
+		if funcStmt.ReturnType != "" {
+			t.Fatalf("Return type not as expected. got=%s", funcStmt.ReturnType)
+		}
+
+		if len(funcStmt.Body.Statements) != 1 {
+			t.Fatalf("funcStmt.Body.Statements does not contain 1 statement. got=%d",
+				len(funcStmt.Body.Statements))
+		}
+
+		bodyStmt := funcStmt.Body.Statements[0]
+
+		if exp, ok := bodyStmt.(*ast.ExpressionStatement); !ok {
+			t.Fatalf("bodyStmt not *ast.ExpressionStatement. got=%T", bodyStmt)
+		} else {
+			if callExp, ok := exp.Expression.(*ast.CallExpression); !ok {
+				t.Fatalf("exp.Expression not *ast.CallExpression. got=%T", exp.Expression)
+			} else {
+				if !testIdentifier(t, callExp.Function, "print") {
+					t.Fatalf("Function not as expected")
+				}
+
+				if len(callExp.Arguments) != 1 {
+					t.Fatalf("callExp.Arguments does not contain 1 argument. got=%d",
+						len(callExp.Arguments))
+				}
+
+				if !testInfixExpression(t, callExp.Arguments[0], "a", "+", "b") {
+					t.Fatalf("Argument not as expected")
+				}
+			}
+		}
+	}
+}
