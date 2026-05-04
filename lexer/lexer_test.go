@@ -17,6 +17,7 @@ func TestAssignStatement(t *testing.T) {
 	"Hello, World!"
 	"\"\n\t\r\\"
 	"こんにちわ"
+	温度: INT = 10
 	`
 
 	l := New(input)
@@ -90,6 +91,11 @@ func TestAssignStatement(t *testing.T) {
 		{STRING_LIT, "Hello, World!"},
 		{STRING_LIT, "\"\n\t\r\\"},
 		{STRING_LIT, "こんにちわ"},
+		{IDENT, "温度"},
+		{COLON, ":"},
+		{IDENT, "INT"},
+		{ASSIGN, "="},
+		{INT_LIT, "10"},
 		{EOF, ""},
 	}
 

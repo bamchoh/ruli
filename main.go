@@ -9,13 +9,8 @@ import (
 
 func main() {
 	input := `
-print("test")
-
-x := "こんにちわ"
-print(x)
-
-print("a" + "b")
-print("abc" == x)
+温度: INT = 10
+print(温度)
 	`
 
 	l := lexer.New(input)

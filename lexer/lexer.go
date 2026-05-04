@@ -1,15 +1,18 @@
 package lexer
 
-import "strings"
+import (
+	"strings"
+	"unicode"
+)
 
 type Lexer struct {
-	input string
+	input []rune
 	pos   int
 	ch    rune
 }
 
 func New(input string) *Lexer {
-	l := &Lexer{input: input}
+	l := &Lexer{input: []rune(input)}
 	l.readChar()
 	return l
 }
@@ -122,7 +125,7 @@ func (l *Lexer) readChar() {
 	if l.pos >= len(l.input) {
 		l.ch = 0
 	} else {
-		l.ch = rune(l.input[l.pos])
+		l.ch = l.input[l.pos]
 	}
 	l.pos++
 }
@@ -147,7 +150,7 @@ func (l *Lexer) readIdentifier() string {
 		l.readChar()
 	}
 
-	return l.input[start : l.pos-1]
+	return string(l.input[start : l.pos-1])
 }
 
 func (l *Lexer) readNumber() string {
@@ -157,13 +160,11 @@ func (l *Lexer) readNumber() string {
 		l.readChar()
 	}
 
-	return l.input[start : l.pos-1]
+	return string(l.input[start : l.pos-1])
 }
 
 func isLetter(ch rune) bool {
-	return ('a' <= ch && ch <= 'z') ||
-		('A' <= ch && ch <= 'Z') ||
-		ch == '_'
+	return unicode.IsLetter(ch) || ch == '_'
 }
 
 func isDigit(ch rune) bool {
@@ -185,23 +186,23 @@ func (l *Lexer) readString() string {
 
 			switch l.ch {
 			case 'n':
-				result.WriteByte('\n')
+				result.WriteRune('\n')
 			case 't':
-				result.WriteByte('\t')
+				result.WriteRune('\t')
 			case 'r':
-				result.WriteByte('\r')
+				result.WriteRune('\r')
 			case '"':
-				result.WriteByte('"')
+				result.WriteRune('"')
 			case '\\':
-				result.WriteByte('\\')
+				result.WriteRune('\\')
 			default:
 				// 未知エスケープはそのまま入れる
-				result.WriteByte(byte(l.ch))
+				result.WriteRune(l.ch)
 			}
 			continue
 		}
 
-		result.WriteByte(byte(l.ch))
+		result.WriteRune(l.ch)
 	}
 
 	return result.String()
