@@ -6,13 +6,16 @@ import (
 )
 
 type Lexer struct {
-	input []rune
-	pos   int
-	ch    rune
+	input        []rune
+	position     int
+	readPosition int
+	ch           rune
 }
 
 func New(input string) *Lexer {
-	l := &Lexer{input: []rune(input)}
+	l := &Lexer{
+		input: []rune(input),
+	}
 	l.readChar()
 	return l
 }
@@ -122,12 +125,14 @@ func (l *Lexer) NextToken() Token {
 }
 
 func (l *Lexer) readChar() {
-	if l.pos >= len(l.input) {
+	if l.readPosition >= len(l.input) {
 		l.ch = 0
 	} else {
-		l.ch = l.input[l.pos]
+		l.ch = l.input[l.readPosition]
 	}
-	l.pos++
+
+	l.position = l.readPosition
+	l.readPosition++
 }
 
 func (l *Lexer) skipWhitespace() {
@@ -137,30 +142,30 @@ func (l *Lexer) skipWhitespace() {
 }
 
 func (l *Lexer) peekChar() rune {
-	if l.pos >= len(l.input) {
+	if l.readPosition >= len(l.input) {
 		return 0
 	}
-	return rune(l.input[l.pos])
+	return l.input[l.readPosition]
 }
 
 func (l *Lexer) readIdentifier() string {
-	start := l.pos - 1
+	start := l.position
 
 	for isLetter(l.ch) || isDigit(l.ch) || l.ch == '_' {
 		l.readChar()
 	}
 
-	return string(l.input[start : l.pos-1])
+	return string(l.input[start:l.position])
 }
 
 func (l *Lexer) readNumber() string {
-	start := l.pos - 1
+	start := l.position
 
 	for isDigit(l.ch) {
 		l.readChar()
 	}
 
-	return string(l.input[start : l.pos-1])
+	return string(l.input[start:l.position])
 }
 
 func isLetter(ch rune) bool {
