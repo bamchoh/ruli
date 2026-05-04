@@ -25,6 +25,11 @@ func (l *Lexer) NextToken() Token {
 
 	l.skipWhitespace()
 
+	if l.ch == '#' {
+		l.skipComment()
+		return l.NextToken()
+	}
+
 	switch l.ch {
 
 	case '=':
@@ -211,4 +216,10 @@ func (l *Lexer) readString() string {
 	}
 
 	return result.String()
+}
+
+func (l *Lexer) skipComment() {
+	for l.ch != '\n' && l.ch != '\r' && l.ch != 0 {
+		l.readChar()
+	}
 }
