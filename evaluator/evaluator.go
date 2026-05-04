@@ -37,6 +37,9 @@ func Eval(node ast.Node, env *object.Environment) object.Object {
 	case *ast.IntegerLiteral:
 		return &object.Integer{Value: node.Value}
 
+	case *ast.StringLiteral:
+		return &object.String{Value: node.Value}
+
 	case *ast.Identifier:
 		if b, ok := builtins[node.Value]; ok {
 			return b
@@ -110,6 +113,8 @@ func evalBinaryExpression(be *ast.BinaryExpression, env *object.Environment) obj
 	switch {
 	case left.Type() == object.INTEGER_OBJ && right.Type() == object.INTEGER_OBJ:
 		return evalIntegerBinaryExpression(be.Operator, left, right)
+	case left.Type() == object.STRING_OBJ && right.Type() == object.STRING_OBJ:
+		return evalStringInfixExpression(be.Operator, left, right)
 	}
 
 	return &object.Null{}
@@ -141,6 +146,29 @@ func evalIntegerBinaryExpression(operator string, left, right object.Object) obj
 	}
 
 	return &object.Null{}
+}
+
+func evalStringInfixExpression(operator string, left, right object.Object) object.Object {
+	lv := left.(*object.String).Value
+	rv := right.(*object.String).Value
+
+	switch operator {
+	case "+":
+		return &object.String{Value: lv + rv}
+	case "==":
+		return nativeBoolToBooleanObject(lv == rv)
+	case "!=":
+		return nativeBoolToBooleanObject(lv != rv)
+	}
+
+	return &object.Null{}
+}
+
+func nativeBoolToBooleanObject(input bool) *object.Boolean {
+	if input {
+		return &object.Boolean{Value: true}
+	}
+	return &object.Boolean{Value: false}
 }
 
 func evalBlockStatement(block *ast.BlockStatement, env *object.Environment) object.Object {

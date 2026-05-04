@@ -51,6 +51,7 @@ func New(l *lexer.Lexer) *Parser {
 
 	p.registerPrefix(lexer.INT_LIT, p.parseIntegerLiteral)
 	p.registerPrefix(lexer.IDENT, p.parseIdentifier)
+	p.registerPrefix(lexer.STRING_LIT, p.parseStringLiteral)
 
 	p.registerInfix(lexer.PLUS, p.parseInfixExpression)
 	p.registerInfix(lexer.MINUS, p.parseInfixExpression)
@@ -503,4 +504,10 @@ func (p *Parser) parseFunctionParameters() []ast.Parameter {
 	}
 
 	return params
+}
+
+func (p *Parser) parseStringLiteral() ast.Expression {
+	return &ast.StringLiteral{
+		Value: p.curToken.Literal,
+	}
 }

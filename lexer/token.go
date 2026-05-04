@@ -56,6 +56,8 @@ const (
 
 	FUNC   = "FUNC"
 	RETURN = "RETURN"
+
+	STRING_LIT = "STRING_LIT"
 )
 
 var keywords = map[string]TokenType{

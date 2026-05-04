@@ -9,12 +9,13 @@ import (
 
 func main() {
 	input := `
-func add(a: INT, b: INT) INT {
-	return a + b
-}
+print("test")
 
-x := add(10, 20)
+x := "abc"
 print(x)
+
+print("a" + "b")
+print("abc" == x)
 	`
 
 	l := lexer.New(input)

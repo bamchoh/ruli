@@ -93,6 +93,9 @@ func (l *Lexer) NextToken() Token {
 	case ';':
 		tok = Token{Type: SEMICOLON, Literal: ";"}
 
+	case '"':
+		tok = Token{Type: STRING_LIT, Literal: l.readString()}
+
 	case 0:
 		tok = Token{Type: EOF, Literal: ""}
 
@@ -163,4 +166,15 @@ func isLetter(ch byte) bool {
 
 func isDigit(ch byte) bool {
 	return '0' <= ch && ch <= '9'
+}
+
+func (l *Lexer) readString() string {
+	l.readChar() // consume the opening quote
+	start := l.pos - 1
+
+	for l.ch != '"' && l.ch != 0 {
+		l.readChar()
+	}
+
+	return l.input[start : l.pos-1]
 }

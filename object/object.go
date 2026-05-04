@@ -48,6 +48,7 @@ const (
 	CONTINUE_OBJ = "CONTINUE"
 	FUNCTION_OBJ = "FUNCTION"
 	RETURN_OBJ   = "RETURN"
+	STRING_OBJ   = "STRING"
 )
 
 type Integer struct {
@@ -133,4 +134,16 @@ func (rv *ReturnValue) Type() ObjectType {
 
 func (rv *ReturnValue) Inspect() string {
 	return rv.Value.Inspect()
+}
+
+type String struct {
+	Value string
+}
+
+func (s *String) Type() ObjectType {
+	return "STRING"
+}
+
+func (s *String) Inspect() string {
+	return s.Value
 }

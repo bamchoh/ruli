@@ -227,3 +227,13 @@ func (rs *ReturnStatement) statementNode() {}
 func (rs *ReturnStatement) String() string {
 	return "return"
 }
+
+type StringLiteral struct {
+	Value string
+}
+
+func (sl *StringLiteral) expressionNode() {}
+
+func (sl *StringLiteral) String() string {
+	return `"` + sl.Value + `"`
+}
