@@ -156,7 +156,7 @@ func (l *Lexer) peekChar() rune {
 func (l *Lexer) readIdentifier() string {
 	start := l.position
 
-	for isLetter(l.ch) || isDigit(l.ch) || l.ch == '_' {
+	for isLetter(l.ch) || isDigit(l.ch) {
 		l.readChar()
 	}
 
