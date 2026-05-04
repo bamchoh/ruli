@@ -5,7 +5,7 @@ import "strings"
 type Lexer struct {
 	input string
 	pos   int
-	ch    byte
+	ch    rune
 }
 
 func New(input string) *Lexer {
@@ -122,7 +122,7 @@ func (l *Lexer) readChar() {
 	if l.pos >= len(l.input) {
 		l.ch = 0
 	} else {
-		l.ch = l.input[l.pos]
+		l.ch = rune(l.input[l.pos])
 	}
 	l.pos++
 }
@@ -133,11 +133,11 @@ func (l *Lexer) skipWhitespace() {
 	}
 }
 
-func (l *Lexer) peekChar() byte {
+func (l *Lexer) peekChar() rune {
 	if l.pos >= len(l.input) {
 		return 0
 	}
-	return l.input[l.pos]
+	return rune(l.input[l.pos])
 }
 
 func (l *Lexer) readIdentifier() string {
@@ -160,13 +160,13 @@ func (l *Lexer) readNumber() string {
 	return l.input[start : l.pos-1]
 }
 
-func isLetter(ch byte) bool {
+func isLetter(ch rune) bool {
 	return ('a' <= ch && ch <= 'z') ||
 		('A' <= ch && ch <= 'Z') ||
 		ch == '_'
 }
 
-func isDigit(ch byte) bool {
+func isDigit(ch rune) bool {
 	return '0' <= ch && ch <= '9'
 }
 
