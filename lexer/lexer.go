@@ -1,5 +1,7 @@
 package lexer
 
+import "strings"
+
 type Lexer struct {
 	input string
 	pos   int
@@ -169,12 +171,38 @@ func isDigit(ch byte) bool {
 }
 
 func (l *Lexer) readString() string {
-	l.readChar() // consume the opening quote
-	start := l.pos - 1
+	var result strings.Builder
 
-	for l.ch != '"' && l.ch != 0 {
+	for {
 		l.readChar()
+
+		if l.ch == 0 || l.ch == '"' {
+			break
+		}
+
+		if l.ch == '\\' {
+			l.readChar()
+
+			switch l.ch {
+			case 'n':
+				result.WriteByte('\n')
+			case 't':
+				result.WriteByte('\t')
+			case 'r':
+				result.WriteByte('\r')
+			case '"':
+				result.WriteByte('"')
+			case '\\':
+				result.WriteByte('\\')
+			default:
+				// 未知エスケープはそのまま入れる
+				result.WriteByte(byte(l.ch))
+			}
+			continue
+		}
+
+		result.WriteByte(byte(l.ch))
 	}
 
-	return l.input[start : l.pos-1]
+	return result.String()
 }

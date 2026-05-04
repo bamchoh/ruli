@@ -11,7 +11,7 @@ func main() {
 	input := `
 print("test")
 
-x := "abc"
+x := "こんにちわ"
 print(x)
 
 print("a" + "b")

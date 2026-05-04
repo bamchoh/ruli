@@ -15,6 +15,8 @@ func TestAssignStatement(t *testing.T) {
 	for i := 0; i < 5; i++ { x = i }
 	print(x)
 	"Hello, World!"
+	"\"\n\t\r\\"
+	"こんにちわ"
 	`
 
 	l := New(input)
@@ -86,6 +88,8 @@ func TestAssignStatement(t *testing.T) {
 		{IDENT, "x"},
 		{RPAREN, ")"},
 		{STRING_LIT, "Hello, World!"},
+		{STRING_LIT, "\"\n\t\r\\"},
+		{STRING_LIT, "こんにちわ"},
 		{EOF, ""},
 	}
 
