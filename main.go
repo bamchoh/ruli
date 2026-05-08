@@ -9,8 +9,11 @@ import (
 
 func main() {
 	input := `
-温度: INT = 10
-print(温度)
+nums := "123"
+
+for i := 0; i < len(nums); i++ {
+	print(nums[i])
+}
 	`
 
 	l := lexer.New(input)

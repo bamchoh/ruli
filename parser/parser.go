@@ -13,6 +13,7 @@ const (
 	SUM
 	PRODUCT
 	CALL
+	INDEX
 )
 
 var precedences = map[lexer.TokenType]int{
@@ -25,6 +26,7 @@ var precedences = map[lexer.TokenType]int{
 	lexer.ASTERISK: PRODUCT,
 	lexer.SLASH:    PRODUCT,
 	lexer.LPAREN:   CALL,
+	lexer.LBRACKET: INDEX,
 }
 
 type (
@@ -62,6 +64,8 @@ func New(l *lexer.Lexer) *Parser {
 	p.registerInfix(lexer.LT, p.parseInfixExpression)
 	p.registerInfix(lexer.GT, p.parseInfixExpression)
 	p.registerInfix(lexer.LPAREN, p.parseCallExpression)
+	p.registerPrefix(lexer.LBRACKET, p.parseArrayLiteral)
+	p.registerInfix(lexer.LBRACKET, p.parseIndexExpression)
 
 	p.nextToken()
 	p.nextToken()
@@ -510,4 +514,30 @@ func (p *Parser) parseStringLiteral() ast.Expression {
 	return &ast.StringLiteral{
 		Value: p.curToken.Literal,
 	}
+}
+
+func (p *Parser) parseArrayLiteral() ast.Expression {
+	array := &ast.ArrayLiteral{}
+
+	array.Elements = p.parseExpressionList(lexer.RBRACKET)
+
+	return array
+}
+
+func (p *Parser) parseIndexExpression(left ast.Expression) ast.Expression {
+	exp := &ast.IndexExpression{
+		Left: left,
+	}
+
+	p.nextToken()
+
+	exp.Index = p.parseExpression(LOWEST)
+
+	if p.peekToken.Type != lexer.RBRACKET {
+		return nil
+	}
+
+	p.nextToken()
+
+	return exp
 }

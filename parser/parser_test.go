@@ -555,3 +555,71 @@ func TestFunction2Statement(t *testing.T) {
 		}
 	}
 }
+
+func TestArrayIndexExpression(t *testing.T) {
+	input := `
+	nums := [1, 2, 3]
+	x := nums[1]
+	`
+
+	l := lexer.New(input)
+	p := New(l)
+	program := p.ParseProgram()
+
+	if len(program.Statements) != 2 {
+		t.Fatalf("program.Statements does not contain 2 statements. got=%d",
+			len(program.Statements))
+	}
+
+	stmt := program.Statements[0]
+
+	if varDecl, ok := stmt.(*ast.VarDeclStatement); !ok {
+		t.Fatalf("stmt not *ast.VarDeclStatement. got=%T", stmt)
+	} else {
+		if varDecl.Name != "nums" {
+			t.Fatalf("Name not as expected. got=%s", varDecl.Name)
+		}
+		if arrayLit, ok := varDecl.Value.(*ast.ArrayLiteral); !ok {
+			t.Fatalf("varDecl.Value not *ast.ArrayLiteral. got=%T", varDecl.Value)
+		} else {
+			if len(arrayLit.Elements) != 3 {
+				t.Fatalf("arrayLit.Elements does not contain 3 elements. got=%d",
+					len(arrayLit.Elements))
+			}
+
+			if !testLiteralExpression(t, arrayLit.Elements[0], 1) {
+				t.Fatalf("Element 0 not as expected")
+			}
+
+			if !testLiteralExpression(t, arrayLit.Elements[1], 2) {
+				t.Fatalf("Element 1 not as expected")
+			}
+
+			if !testLiteralExpression(t, arrayLit.Elements[2], 3) {
+				t.Fatalf("Element 2 not as expected")
+			}
+		}
+	}
+
+	stmt = program.Statements[1]
+
+	if assignStmt, ok := stmt.(*ast.VarDeclStatement); !ok {
+		t.Fatalf("stmt not *ast.VarDeclStatement. got=%T", stmt)
+	} else {
+		if assignStmt.Name != "x" {
+			t.Fatalf("Name not as expected. got=%s", assignStmt.Name)
+		}
+
+		if indexExp, ok := assignStmt.Value.(*ast.IndexExpression); !ok {
+			t.Fatalf("assignStmt.Value not *ast.IndexExpression. got=%T", assignStmt.Value)
+		} else {
+			if !testIdentifier(t, indexExp.Left, "nums") {
+				t.Fatalf("Left not as expected")
+			}
+
+			if !testLiteralExpression(t, indexExp.Index, 1) {
+				t.Fatalf("Index not as expected")
+			}
+		}
+	}
+}

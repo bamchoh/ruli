@@ -88,6 +88,12 @@ func (l *Lexer) NextToken() Token {
 			tok = Token{Type: COLON, Literal: string(l.ch)}
 		}
 
+	case '[':
+		tok = Token{Type: LBRACKET, Literal: "["}
+
+	case ']':
+		tok = Token{Type: RBRACKET, Literal: "]"}
+
 	case '{':
 		tok = Token{Type: LBRACE, Literal: "{"}
 

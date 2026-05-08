@@ -41,11 +41,13 @@ const (
 	IF   = "IF"
 	ELSE = "ELSE"
 
-	LBRACE = "{"
-	RBRACE = "}"
-	LPAREN = "("
-	RPAREN = ")"
-	COMMA  = ","
+	LBRACE   = "{"
+	RBRACE   = "}"
+	LPAREN   = "("
+	RPAREN   = ")"
+	LBRACKET = "["
+	RBRACKET = "]"
+	COMMA    = ","
 
 	INC = "++"
 	DEC = "--"

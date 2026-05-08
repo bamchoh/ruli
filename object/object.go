@@ -3,6 +3,7 @@ package object
 import (
 	"fmt"
 	"ruli/ast"
+	"strings"
 )
 
 type Environment struct {
@@ -49,6 +50,7 @@ const (
 	FUNCTION_OBJ = "FUNCTION"
 	RETURN_OBJ   = "RETURN"
 	STRING_OBJ   = "STRING"
+	ARRAY_OBJ    = "ARRAY"
 )
 
 type Integer struct {
@@ -146,4 +148,29 @@ func (s *String) Type() ObjectType {
 
 func (s *String) Inspect() string {
 	return s.Value
+}
+
+type Array struct {
+	Elements []Object
+}
+
+func (a *Array) Type() ObjectType {
+	return ARRAY_OBJ
+}
+
+func (a *Array) Inspect() string {
+	var out strings.Builder
+
+	out.WriteString("[")
+
+	for i, e := range a.Elements {
+		if i > 0 {
+			out.WriteString(", ")
+		}
+		out.WriteString(e.Inspect())
+	}
+
+	out.WriteString("]")
+
+	return out.String()
 }

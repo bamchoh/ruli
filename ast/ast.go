@@ -3,6 +3,7 @@ package ast
 import (
 	"bytes"
 	"fmt"
+	"strings"
 )
 
 type Node interface {
@@ -236,4 +237,38 @@ func (sl *StringLiteral) expressionNode() {}
 
 func (sl *StringLiteral) String() string {
 	return `"` + sl.Value + `"`
+}
+
+type ArrayLiteral struct {
+	Elements []Expression
+}
+
+func (al *ArrayLiteral) expressionNode() {}
+
+func (al *ArrayLiteral) String() string {
+	var out strings.Builder
+
+	out.WriteString("[")
+
+	for i, e := range al.Elements {
+		if i > 0 {
+			out.WriteString(", ")
+		}
+		out.WriteString(e.String())
+	}
+
+	out.WriteString("]")
+
+	return out.String()
+}
+
+type IndexExpression struct {
+	Left  Expression
+	Index Expression
+}
+
+func (ie *IndexExpression) expressionNode() {}
+
+func (ie *IndexExpression) String() string {
+	return "(" + ie.Left.String() + "[" + ie.Index.String() + "])"
 }

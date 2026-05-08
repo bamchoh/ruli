@@ -15,6 +15,30 @@ var builtins = map[string]*object.Builtin{
 			return &object.Null{}
 		},
 	},
+
+	"len": {
+		Fn: func(args ...object.Object) object.Object {
+
+			if len(args) != 1 {
+				return &object.Null{}
+			}
+
+			switch arg := args[0].(type) {
+
+			case *object.Array:
+				return &object.Integer{
+					Value: (len(arg.Elements)),
+				}
+
+			case *object.String:
+				return &object.Integer{
+					Value: (len([]rune(arg.Value))),
+				}
+			}
+
+			return &object.Null{}
+		},
+	},
 }
 
 func Eval(node ast.Node, env *object.Environment) object.Object {
@@ -90,6 +114,22 @@ func Eval(node ast.Node, env *object.Environment) object.Object {
 	case *ast.ReturnStatement:
 		val := Eval(node.Value, env)
 		return &object.ReturnValue{Value: val}
+
+	case *ast.ArrayLiteral:
+		var elements []object.Object
+
+		for _, el := range node.Elements {
+			elements = append(elements, Eval(el, env))
+		}
+
+		return &object.Array{Elements: elements}
+
+	case *ast.IndexExpression:
+		left := Eval(node.Left, env)
+		index := Eval(node.Index, env)
+
+		return evalIndexExpression(left, index)
+
 	}
 
 	return &object.Null{}
@@ -302,4 +342,30 @@ func applyFunction(fn *object.Function, args []object.Object) object.Object {
 	}
 
 	return result
+}
+
+func evalIndexExpression(left, index object.Object) object.Object {
+
+	switch {
+	case left.Type() == object.ARRAY_OBJ &&
+		index.Type() == object.INTEGER_OBJ:
+
+		return evalArrayIndexExpression(left, index)
+	}
+
+	return &object.Null{}
+}
+
+func evalArrayIndexExpression(array, index object.Object) object.Object {
+
+	arrayObject := array.(*object.Array)
+	idx := index.(*object.Integer).Value
+
+	max := len(arrayObject.Elements) - 1
+
+	if idx < 0 || idx > max {
+		return &object.Null{}
+	}
+
+	return arrayObject.Elements[idx]
 }
