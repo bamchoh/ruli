@@ -178,6 +178,9 @@ func (a *Array) Inspect() string {
 
 type Error struct {
 	Message string
+
+	Line   int
+	Column int
 }
 
 func (e *Error) Type() ObjectType {
@@ -185,5 +188,10 @@ func (e *Error) Type() ObjectType {
 }
 
 func (e *Error) Inspect() string {
-	return "ERROR: " + e.Message
+	return fmt.Sprintf(
+		"ERROR: line %d, column %d: %s",
+		e.Line,
+		e.Column,
+		e.Message,
+	)
 }

@@ -189,6 +189,7 @@ func (p *Parser) parseVarDeclStatement() *ast.VarDeclStatement {
 func (p *Parser) parseAssignStatement() *ast.AssignStatement {
 	stmt := &ast.AssignStatement{
 		Left: &ast.Identifier{
+			Token: p.curToken,
 			Value: p.curToken.Literal,
 		},
 	}
@@ -275,6 +276,7 @@ func (p *Parser) parseIntegerLiteral() ast.Expression {
 
 func (p *Parser) parseIdentifier() ast.Expression {
 	return &ast.Identifier{
+		Token: p.curToken,
 		Value: p.curToken.Literal,
 	}
 }
@@ -426,6 +428,7 @@ func (p *Parser) parseForStatement() *ast.ForStatement {
 func (p *Parser) parseCallExpression(function ast.Expression) ast.Expression {
 
 	exp := &ast.CallExpression{
+		Token:    p.curToken,
 		Function: function,
 	}
 
@@ -552,7 +555,8 @@ func (p *Parser) parseArrayLiteral() ast.Expression {
 
 func (p *Parser) parseIndexExpression(left ast.Expression) ast.Expression {
 	exp := &ast.IndexExpression{
-		Left: left,
+		Token: p.curToken,
+		Left:  left,
 	}
 
 	p.nextToken()

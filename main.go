@@ -12,6 +12,7 @@ import (
 func main() {
 	input := `
 print(1)
+undefined
 print(2)	`
 
 	l := lexer.New(input)

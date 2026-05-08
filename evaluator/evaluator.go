@@ -8,19 +8,19 @@ import (
 
 var builtins = map[string]*object.Builtin{
 	"print": {
-		Fn: func(args ...object.Object) object.Object {
+		Fn: func(args ...object.Object) (object.Object, error) {
 			for _, arg := range args {
 				fmt.Println(arg.Inspect())
 			}
-			return &object.Null{}
+			return &object.Null{}, nil
 		},
 	},
 
 	"len": {
-		Fn: func(args ...object.Object) object.Object {
+		Fn: func(args ...object.Object) (object.Object, error) {
 
 			if len(args) != 1 {
-				return &object.Null{}
+				return &object.Null{}, fmt.Errorf("wrong number of arguments. got=%d, want=1", len(args))
 			}
 
 			switch arg := args[0].(type) {
@@ -28,15 +28,15 @@ var builtins = map[string]*object.Builtin{
 			case *object.Array:
 				return &object.Integer{
 					Value: (len(arg.Elements)),
-				}
+				}, nil
 
 			case *object.String:
 				return &object.Integer{
 					Value: (len([]rune(arg.Value))),
-				}
+				}, nil
 			}
 
-			return newError("argument to `len` not supported, got %s", args[0].Type())
+			return &object.Null{}, fmt.Errorf("argument to `len` not supported, got %s", args[0].Type())
 		},
 	},
 }
@@ -77,7 +77,7 @@ func Eval(node ast.Node, env *object.Environment) object.Object {
 
 		v, ok := env.Get(node.Value)
 		if !ok {
-			return newError("identifier not found: " + node.Value)
+			return newError(node.Token.Line, node.Token.Column, "identifier not found: "+node.Value)
 		}
 		return v
 
@@ -143,7 +143,7 @@ func Eval(node ast.Node, env *object.Environment) object.Object {
 			return index
 		}
 
-		return evalIndexExpression(left, index)
+		return evalIndexExpression(node, left, index)
 
 	}
 
@@ -367,13 +367,17 @@ func evalCallExpression(node *ast.CallExpression, env *object.Environment) objec
 	switch fn := function.(type) {
 
 	case *object.Builtin:
-		return fn.Fn(args...)
+		result, err := fn.Fn(args...)
+		if err != nil {
+			return newError(node.Token.Line, node.Token.Column, err.Error())
+		}
+		return result
 
 	case *object.Function:
 		return applyFunction(fn, args)
 	}
 
-	return &object.Null{}
+	return newError(node.Token.Line, node.Token.Column, "not a function: %s", function.Type())
 }
 
 func applyFunction(fn *object.Function, args []object.Object) object.Object {
@@ -398,19 +402,19 @@ func applyFunction(fn *object.Function, args []object.Object) object.Object {
 	return result
 }
 
-func evalIndexExpression(left, index object.Object) object.Object {
+func evalIndexExpression(node *ast.IndexExpression, left, index object.Object) object.Object {
 
 	switch {
 	case left.Type() == object.ARRAY_OBJ &&
 		index.Type() == object.INTEGER_OBJ:
 
-		return evalArrayIndexExpression(left, index)
+		return evalArrayIndexExpression(node, left, index)
 	}
 
-	return newError("not an array")
+	return newError(node.Token.Line, node.Token.Column, "not an array")
 }
 
-func evalArrayIndexExpression(array, index object.Object) object.Object {
+func evalArrayIndexExpression(node *ast.IndexExpression, array, index object.Object) object.Object {
 
 	arrayObject := array.(*object.Array)
 	idx := index.(*object.Integer).Value
@@ -418,7 +422,7 @@ func evalArrayIndexExpression(array, index object.Object) object.Object {
 	max := len(arrayObject.Elements) - 1
 
 	if idx < 0 || idx > max {
-		return newError("index out of range: %d", idx)
+		return newError(node.Token.Line, node.Token.Column, "index out of range: %d", idx)
 	}
 
 	return arrayObject.Elements[idx]
@@ -465,18 +469,20 @@ func evalIndexAssign(
 
 	array, ok := arrayObj.(*object.Array)
 	if !ok {
-		return newError("not an array")
+		return newError(left.Token.Line, left.Token.Column, "not an array")
 	}
 
 	index, ok := indexObj.(*object.Integer)
 	if !ok {
-		return newError("index is not an integer")
+		return newError(left.Token.Line, left.Token.Column, "index is not an integer")
 	}
 
 	idx := index.Value
 
 	if idx < 0 || idx >= (len(array.Elements)) {
 		return newError(
+			left.Token.Line,
+			left.Token.Column,
 			"index out of range: %d",
 			idx,
 		)

@@ -5,9 +5,17 @@ import (
 	"ruli/object"
 )
 
-func newError(format string, a ...interface{}) object.Object {
+func newError(
+	line int,
+	column int,
+	format string,
+	a ...interface{},
+) object.Object {
+
 	return &object.Error{
 		Message: fmt.Sprintf(format, a...),
+		Line:    line,
+		Column:  column,
 	}
 }
 

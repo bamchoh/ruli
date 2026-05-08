@@ -3,6 +3,7 @@ package ast
 import (
 	"bytes"
 	"fmt"
+	"ruli/lexer"
 	"strings"
 )
 
@@ -56,6 +57,7 @@ func (vs *VarDeclStatement) String() string {
 }
 
 type Identifier struct {
+	Token lexer.Token
 	Value string
 }
 
@@ -175,6 +177,7 @@ func (es *ExpressionStatement) String() string {
 }
 
 type CallExpression struct {
+	Token     lexer.Token
 	Function  Expression
 	Arguments []Expression
 }
@@ -263,6 +266,7 @@ func (al *ArrayLiteral) String() string {
 }
 
 type IndexExpression struct {
+	Token lexer.Token
 	Left  Expression
 	Index Expression
 }
