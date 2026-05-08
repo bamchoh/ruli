@@ -51,6 +51,7 @@ const (
 	RETURN_OBJ   = "RETURN"
 	STRING_OBJ   = "STRING"
 	ARRAY_OBJ    = "ARRAY"
+	ERROR_OBJ    = "ERROR"
 )
 
 type Integer struct {
@@ -173,4 +174,16 @@ func (a *Array) Inspect() string {
 	out.WriteString("]")
 
 	return out.String()
+}
+
+type Error struct {
+	Message string
+}
+
+func (e *Error) Type() ObjectType {
+	return ERROR_OBJ
+}
+
+func (e *Error) Inspect() string {
+	return "ERROR: " + e.Message
 }

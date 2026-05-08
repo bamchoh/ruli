@@ -1,6 +1,8 @@
 package main
 
 import (
+	"fmt"
+	"os"
 	"ruli/evaluator"
 	"ruli/lexer"
 	"ruli/object"
@@ -9,24 +11,17 @@ import (
 
 func main() {
 	input := `
-nums := [1, 2, 3, 4, 5]
-
-for i := 0; i < len(nums); i++ {
-	print(nums[i])
-}
-
-nums[0] = "a"
-
-for i := 0; i < len(nums); i++ {
-	print(nums[i])
-}
-
-	`
+print(1)
+print(2)	`
 
 	l := lexer.New(input)
 	p := parser.New(l)
 	program := p.ParseProgram()
 
 	env := object.NewEnvironment()
-	evaluator.Eval(program, env)
+	result := evaluator.Eval(program, env)
+	if errObj, ok := result.(*object.Error); ok {
+		fmt.Fprintln(os.Stderr, errObj.Inspect())
+		os.Exit(1)
+	}
 }

@@ -36,7 +36,7 @@ var builtins = map[string]*object.Builtin{
 				}
 			}
 
-			return &object.Null{}
+			return newError("argument to `len` not supported, got %s", args[0].Type())
 		},
 	},
 }
@@ -50,11 +50,17 @@ func Eval(node ast.Node, env *object.Environment) object.Object {
 
 	case *ast.VarDeclStatement:
 		val := Eval(node.Value, env)
+		if isError(val) {
+			return val
+		}
 		env.Set(node.Name, val)
 		return val
 
 	case *ast.AssignStatement:
 		val := Eval(node.Value, env)
+		if isError(val) {
+			return val
+		}
 		evalAssignStatement(node, env)
 		return val
 
@@ -71,7 +77,7 @@ func Eval(node ast.Node, env *object.Environment) object.Object {
 
 		v, ok := env.Get(node.Value)
 		if !ok {
-			return &object.Null{}
+			return newError("identifier not found: " + node.Value)
 		}
 		return v
 
@@ -113,6 +119,9 @@ func Eval(node ast.Node, env *object.Environment) object.Object {
 
 	case *ast.ReturnStatement:
 		val := Eval(node.Value, env)
+		if isError(val) {
+			return val
+		}
 		return &object.ReturnValue{Value: val}
 
 	case *ast.ArrayLiteral:
@@ -126,7 +135,13 @@ func Eval(node ast.Node, env *object.Environment) object.Object {
 
 	case *ast.IndexExpression:
 		left := Eval(node.Left, env)
+		if isError(left) {
+			return left
+		}
 		index := Eval(node.Index, env)
+		if isError(index) {
+			return index
+		}
 
 		return evalIndexExpression(left, index)
 
@@ -140,6 +155,9 @@ func evalProgram(program *ast.Program, env *object.Environment) object.Object {
 
 	for _, stmt := range program.Statements {
 		result = Eval(stmt, env)
+		if isError(result) {
+			return result
+		}
 	}
 
 	return result
@@ -148,7 +166,14 @@ func evalProgram(program *ast.Program, env *object.Environment) object.Object {
 func evalBinaryExpression(be *ast.BinaryExpression, env *object.Environment) object.Object {
 
 	left := Eval(be.Left, env)
+	if isError(left) {
+		return left
+	}
+
 	right := Eval(be.Right, env)
+	if isError(right) {
+		return right
+	}
 
 	switch {
 	case left.Type() == object.INTEGER_OBJ && right.Type() == object.INTEGER_OBJ:
@@ -216,6 +241,9 @@ func evalBlockStatement(block *ast.BlockStatement, env *object.Environment) obje
 
 	for _, stmt := range block.Statements {
 		result = Eval(stmt, env)
+		if isError(result) {
+			return result
+		}
 
 		if result != nil {
 			rt := result.Type()
@@ -231,6 +259,9 @@ func evalBlockStatement(block *ast.BlockStatement, env *object.Environment) obje
 func evalIfStatement(stmt *ast.IfStatement, env *object.Environment) object.Object {
 
 	cond := Eval(stmt.Condition, env)
+	if isError(cond) {
+		return cond
+	}
 
 	if isTruthy(cond) {
 		return Eval(stmt.Consequence, env)
@@ -275,15 +306,25 @@ func evalIncDecStatement(stmt *ast.IncDecStatement, env *object.Environment) obj
 
 func evalForStatement(stmt *ast.ForStatement, env *object.Environment) object.Object {
 
-	Eval(stmt.Init, env)
+	initret := Eval(stmt.Init, env)
+	if isError(initret) {
+		return initret
+	}
 
 	for {
 		cond := Eval(stmt.Condition, env)
+		if isError(cond) {
+			return cond
+		}
+
 		if !isTruthy(cond) {
 			break
 		}
 
 		result := Eval(stmt.Body, env)
+		if isError(result) {
+			return result
+		}
 
 		if result != nil {
 			switch result.Type() {
@@ -293,12 +334,18 @@ func evalForStatement(stmt *ast.ForStatement, env *object.Environment) object.Ob
 				return result
 
 			case object.CONTINUE_OBJ:
-				Eval(stmt.Post, env)
+				ret := Eval(stmt.Post, env)
+				if isError(ret) {
+					return ret
+				}
 				continue
 			}
 		}
 
-		Eval(stmt.Post, env)
+		postret := Eval(stmt.Post, env)
+		if isError(postret) {
+			return postret
+		}
 	}
 
 	return &object.Null{}
@@ -310,7 +357,11 @@ func evalCallExpression(node *ast.CallExpression, env *object.Environment) objec
 
 	var args []object.Object
 	for _, arg := range node.Arguments {
-		args = append(args, Eval(arg, env))
+		arg := Eval(arg, env)
+		if isError(arg) {
+			return arg
+		}
+		args = append(args, arg)
 	}
 
 	switch fn := function.(type) {
@@ -336,6 +387,9 @@ func applyFunction(fn *object.Function, args []object.Object) object.Object {
 	}
 
 	result := Eval(fn.Body, extendedEnv)
+	if isError(result) {
+		return result
+	}
 
 	if rv, ok := result.(*object.ReturnValue); ok {
 		return rv.Value
@@ -353,7 +407,7 @@ func evalIndexExpression(left, index object.Object) object.Object {
 		return evalArrayIndexExpression(left, index)
 	}
 
-	return &object.Null{}
+	return newError("not an array")
 }
 
 func evalArrayIndexExpression(array, index object.Object) object.Object {
@@ -364,7 +418,7 @@ func evalArrayIndexExpression(array, index object.Object) object.Object {
 	max := len(arrayObject.Elements) - 1
 
 	if idx < 0 || idx > max {
-		return &object.Null{}
+		return newError("index out of range: %d", idx)
 	}
 
 	return arrayObject.Elements[idx]
@@ -376,6 +430,9 @@ func evalAssignStatement(
 ) object.Object {
 
 	val := Eval(stmt.Value, env)
+	if isError(val) {
+		return val
+	}
 
 	switch left := stmt.Left.(type) {
 
@@ -397,22 +454,32 @@ func evalIndexAssign(
 ) object.Object {
 
 	arrayObj := Eval(left.Left, env)
+	if isError(arrayObj) {
+		return arrayObj
+	}
+
 	indexObj := Eval(left.Index, env)
+	if isError(indexObj) {
+		return indexObj
+	}
 
 	array, ok := arrayObj.(*object.Array)
 	if !ok {
-		return &object.Null{}
+		return newError("not an array")
 	}
 
 	index, ok := indexObj.(*object.Integer)
 	if !ok {
-		return &object.Null{}
+		return newError("index is not an integer")
 	}
 
 	idx := index.Value
 
 	if idx < 0 || idx >= (len(array.Elements)) {
-		return &object.Null{}
+		return newError(
+			"index out of range: %d",
+			idx,
+		)
 	}
 
 	array.Elements[idx] = val
