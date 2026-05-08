@@ -9,11 +9,18 @@ import (
 
 func main() {
 	input := `
-nums := "123"
+nums := [1, 2, 3, 4, 5]
 
 for i := 0; i < len(nums); i++ {
 	print(nums[i])
 }
+
+nums[0] = "a"
+
+for i := 0; i < len(nums); i++ {
+	print(nums[i])
+}
+
 	`
 
 	l := lexer.New(input)

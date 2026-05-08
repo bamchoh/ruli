@@ -54,6 +54,7 @@ func New(l *lexer.Lexer) *Parser {
 	p.registerPrefix(lexer.INT_LIT, p.parseIntegerLiteral)
 	p.registerPrefix(lexer.IDENT, p.parseIdentifier)
 	p.registerPrefix(lexer.STRING_LIT, p.parseStringLiteral)
+	p.registerPrefix(lexer.LBRACKET, p.parseArrayLiteral)
 
 	p.registerInfix(lexer.PLUS, p.parseInfixExpression)
 	p.registerInfix(lexer.MINUS, p.parseInfixExpression)
@@ -64,7 +65,6 @@ func New(l *lexer.Lexer) *Parser {
 	p.registerInfix(lexer.LT, p.parseInfixExpression)
 	p.registerInfix(lexer.GT, p.parseInfixExpression)
 	p.registerInfix(lexer.LPAREN, p.parseCallExpression)
-	p.registerPrefix(lexer.LBRACKET, p.parseArrayLiteral)
 	p.registerInfix(lexer.LBRACKET, p.parseIndexExpression)
 
 	p.nextToken()
@@ -121,6 +121,10 @@ func (p *Parser) parseStatement() ast.Statement {
 		return p.parseReturnStatement()
 
 	case lexer.IDENT:
+
+		if p.peekToken.Type == lexer.LBRACKET {
+			return p.parseIndexedAssignStatement()
+		}
 
 		switch p.peekToken.Type {
 
@@ -184,11 +188,33 @@ func (p *Parser) parseVarDeclStatement() *ast.VarDeclStatement {
 
 func (p *Parser) parseAssignStatement() *ast.AssignStatement {
 	stmt := &ast.AssignStatement{
-		Name: p.curToken.Literal,
+		Left: &ast.Identifier{
+			Value: p.curToken.Literal,
+		},
 	}
 	p.nextToken() // skip =
 	p.nextToken() // first expr token
 	stmt.Value = p.parseExpression(LOWEST)
+	return stmt
+}
+
+func (p *Parser) parseIndexedAssignStatement() *ast.AssignStatement {
+
+	left := p.parseExpression(LOWEST)
+
+	if p.peekToken.Type != lexer.ASSIGN {
+		return nil
+	}
+
+	stmt := &ast.AssignStatement{
+		Left: left,
+	}
+
+	p.nextToken() // =
+	p.nextToken() // first expr
+
+	stmt.Value = p.parseExpression(LOWEST)
+
 	return stmt
 }
 

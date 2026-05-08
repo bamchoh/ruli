@@ -23,8 +23,8 @@ func TestAssignStatement(t *testing.T) {
 		t.Fatalf("stmt not *ast.AssignStatement. got=%T", stmt)
 	}
 
-	if assignStmt.Name != "x" {
-		t.Fatalf("assignStmt.Name not %s. got=%s", "x", assignStmt.Name)
+	if assignStmt.Left.(*ast.Identifier).Value != "x" {
+		t.Fatalf("assignStmt.Left.(*ast.Identifier).Value not %s. got=%s", "x", assignStmt.Left.(*ast.Identifier).Value)
 	}
 
 	val := assignStmt.Value
@@ -378,8 +378,8 @@ func testAssignStatement(t *testing.T, s ast.Statement, name string, value strin
 		return false
 	}
 
-	if assignStmt.Name != name {
-		t.Errorf("assignStmt.Name not %s. got=%s", name, assignStmt.Name)
+	if assignStmt.Left.(*ast.Identifier).Value != name {
+		t.Errorf("assignStmt.Left.(*ast.Identifier).Value not %s. got=%s", name, assignStmt.Left.(*ast.Identifier).Value)
 		return false
 	}
 

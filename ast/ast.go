@@ -34,13 +34,13 @@ func (p *Program) String() string {
 }
 
 type AssignStatement struct {
-	Name  string
+	Left  Expression
 	Value Expression
 }
 
 func (as *AssignStatement) statementNode() {}
 func (as *AssignStatement) String() string {
-	return as.Name + " = " + as.Value.String()
+	return as.Left.String() + " = " + as.Value.String()
 }
 
 type VarDeclStatement struct {

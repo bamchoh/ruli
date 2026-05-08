@@ -55,7 +55,7 @@ func Eval(node ast.Node, env *object.Environment) object.Object {
 
 	case *ast.AssignStatement:
 		val := Eval(node.Value, env)
-		env.Set(node.Name, val)
+		evalAssignStatement(node, env)
 		return val
 
 	case *ast.IntegerLiteral:
@@ -368,4 +368,54 @@ func evalArrayIndexExpression(array, index object.Object) object.Object {
 	}
 
 	return arrayObject.Elements[idx]
+}
+
+func evalAssignStatement(
+	stmt *ast.AssignStatement,
+	env *object.Environment,
+) object.Object {
+
+	val := Eval(stmt.Value, env)
+
+	switch left := stmt.Left.(type) {
+
+	case *ast.Identifier:
+		env.Set(left.Value, val)
+		return val
+
+	case *ast.IndexExpression:
+		return evalIndexAssign(left, val, env)
+	}
+
+	return &object.Null{}
+}
+
+func evalIndexAssign(
+	left *ast.IndexExpression,
+	val object.Object,
+	env *object.Environment,
+) object.Object {
+
+	arrayObj := Eval(left.Left, env)
+	indexObj := Eval(left.Index, env)
+
+	array, ok := arrayObj.(*object.Array)
+	if !ok {
+		return &object.Null{}
+	}
+
+	index, ok := indexObj.(*object.Integer)
+	if !ok {
+		return &object.Null{}
+	}
+
+	idx := index.Value
+
+	if idx < 0 || idx >= (len(array.Elements)) {
+		return &object.Null{}
+	}
+
+	array.Elements[idx] = val
+
+	return val
 }
