@@ -2,20 +2,20 @@ package evaluator
 
 import (
 	"fmt"
+	"ruli/ast"
 	"ruli/object"
 )
 
-func newError(
-	line int,
-	column int,
+func newErrorAtNode(
+	node ast.Node,
 	format string,
 	a ...interface{},
 ) object.Object {
 
 	return &object.Error{
 		Message: fmt.Sprintf(format, a...),
-		Line:    line,
-		Column:  column,
+		Line:    node.GetToken().Line,
+		Column:  node.GetToken().Column,
 	}
 }
 

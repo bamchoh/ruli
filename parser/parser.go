@@ -79,7 +79,9 @@ func (p *Parser) nextToken() {
 }
 
 func (p *Parser) ParseProgram() *ast.Program {
-	program := &ast.Program{}
+	program := &ast.Program{
+		Token: p.curToken,
+	}
 
 	for p.curToken.Type != lexer.EOF {
 
@@ -109,10 +111,10 @@ func (p *Parser) parseStatement() ast.Statement {
 		return p.parseForStatement()
 
 	case lexer.BREAK:
-		return &ast.BreakStatement{}
+		return &ast.BreakStatement{Token: p.curToken}
 
 	case lexer.CONTINUE:
-		return &ast.ContinueStatement{}
+		return &ast.ContinueStatement{Token: p.curToken}
 
 	case lexer.FUNC:
 		return p.parseFunctionStatement()
@@ -153,7 +155,10 @@ func (p *Parser) parseExpressionStatement() *ast.ExpressionStatement {
 func (p *Parser) parseVarDeclStatement() *ast.VarDeclStatement {
 
 	stmt := &ast.VarDeclStatement{
-		Name: p.curToken.Literal,
+		Name: &ast.Identifier{
+			Token: p.curToken,
+			Value: p.curToken.Literal,
+		},
 	}
 
 	// x := 10
@@ -224,17 +229,17 @@ func (p *Parser) parseType() ast.TypeNode {
 	switch p.curToken.Type {
 
 	case lexer.INT:
-		return &ast.BasicType{Name: "INT"}
+		return &ast.BasicType{Token: p.curToken, Name: "INT"}
 
 	case lexer.REAL:
-		return &ast.BasicType{Name: "REAL"}
+		return &ast.BasicType{Token: p.curToken, Name: "REAL"}
 
 	case lexer.BOOL:
-		return &ast.BasicType{Name: "BOOL"}
+		return &ast.BasicType{Token: p.curToken, Name: "BOOL"}
 
 	case lexer.IDENT:
 		// distinct type / struct名 将来対応
-		return &ast.BasicType{Name: p.curToken.Literal}
+		return &ast.BasicType{Token: p.curToken, Name: p.curToken.Literal}
 	}
 
 	return nil
@@ -270,6 +275,7 @@ func (p *Parser) parseIntegerLiteral() ast.Expression {
 		return nil
 	}
 	return &ast.IntegerLiteral{
+		Token: p.curToken,
 		Value: int(value),
 	}
 }
@@ -320,7 +326,9 @@ func (p *Parser) registerInfix(tokenType lexer.TokenType, fn infixParseFn) {
 
 func (p *Parser) parseIfStatement() *ast.IfStatement {
 
-	stmt := &ast.IfStatement{}
+	stmt := &ast.IfStatement{
+		Token: p.curToken,
+	}
 
 	p.nextToken() // condition first token
 
@@ -342,6 +350,7 @@ func (p *Parser) parseIfStatement() *ast.IfStatement {
 			p.nextToken()
 
 			stmt.Alternative = &ast.BlockStatement{
+				Token: p.curToken,
 				Statements: []ast.Statement{
 					p.parseIfStatement(),
 				},
@@ -363,7 +372,9 @@ func (p *Parser) parseIfStatement() *ast.IfStatement {
 
 func (p *Parser) parseBlockStatement() *ast.BlockStatement {
 
-	block := &ast.BlockStatement{}
+	block := &ast.BlockStatement{
+		Token: p.curToken,
+	}
 
 	for p.curToken.Type != lexer.RBRACE && p.curToken.Type != lexer.EOF {
 
@@ -380,7 +391,8 @@ func (p *Parser) parseBlockStatement() *ast.BlockStatement {
 
 func (p *Parser) parseIncDecStatement() *ast.IncDecStatement {
 	stmt := &ast.IncDecStatement{
-		Name: p.curToken.Literal,
+		Token: p.curToken,
+		Name:  p.curToken.Literal,
 	}
 
 	p.nextToken() // ++ or --
@@ -392,7 +404,9 @@ func (p *Parser) parseIncDecStatement() *ast.IncDecStatement {
 
 func (p *Parser) parseForStatement() *ast.ForStatement {
 
-	stmt := &ast.ForStatement{}
+	stmt := &ast.ForStatement{
+		Token: p.curToken,
+	}
 
 	p.nextToken() // init first token
 	stmt.Init = p.parseStatement()
@@ -462,7 +476,9 @@ func (p *Parser) parseExpressionList(end lexer.TokenType) []ast.Expression {
 }
 
 func (p *Parser) parseReturnStatement() *ast.ReturnStatement {
-	stmt := &ast.ReturnStatement{}
+	stmt := &ast.ReturnStatement{
+		Token: p.curToken,
+	}
 
 	p.nextToken()
 	stmt.Value = p.parseExpression(LOWEST)
@@ -472,7 +488,9 @@ func (p *Parser) parseReturnStatement() *ast.ReturnStatement {
 
 func (p *Parser) parseFunctionStatement() *ast.FunctionStatement {
 
-	stmt := &ast.FunctionStatement{}
+	stmt := &ast.FunctionStatement{
+		Token: p.curToken,
+	}
 
 	p.nextToken() // function name
 	stmt.Name = p.curToken.Literal
@@ -541,12 +559,15 @@ func (p *Parser) parseFunctionParameters() []ast.Parameter {
 
 func (p *Parser) parseStringLiteral() ast.Expression {
 	return &ast.StringLiteral{
+		Token: p.curToken,
 		Value: p.curToken.Literal,
 	}
 }
 
 func (p *Parser) parseArrayLiteral() ast.Expression {
-	array := &ast.ArrayLiteral{}
+	array := &ast.ArrayLiteral{
+		Token: p.curToken,
+	}
 
 	array.Elements = p.parseExpressionList(lexer.RBRACKET)
 

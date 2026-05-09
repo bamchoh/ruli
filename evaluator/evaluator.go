@@ -53,7 +53,7 @@ func Eval(node ast.Node, env *object.Environment) object.Object {
 		if isError(val) {
 			return val
 		}
-		env.Set(node.Name, val)
+		env.Set(node.Name.Value, val)
 		return val
 
 	case *ast.AssignStatement:
@@ -77,7 +77,7 @@ func Eval(node ast.Node, env *object.Environment) object.Object {
 
 		v, ok := env.Get(node.Value)
 		if !ok {
-			return newError(node.Token.Line, node.Token.Column, "identifier not found: "+node.Value)
+			return newErrorAtNode(node, "identifier not found: %s", node.Value)
 		}
 		return v
 
@@ -369,7 +369,7 @@ func evalCallExpression(node *ast.CallExpression, env *object.Environment) objec
 	case *object.Builtin:
 		result, err := fn.Fn(args...)
 		if err != nil {
-			return newError(node.Token.Line, node.Token.Column, err.Error())
+			return newErrorAtNode(node, "%s", err.Error())
 		}
 		return result
 
@@ -377,7 +377,7 @@ func evalCallExpression(node *ast.CallExpression, env *object.Environment) objec
 		return applyFunction(fn, args)
 	}
 
-	return newError(node.Token.Line, node.Token.Column, "not a function: %s", function.Type())
+	return newErrorAtNode(node, "not a function: %s", function.Type())
 }
 
 func applyFunction(fn *object.Function, args []object.Object) object.Object {
@@ -411,7 +411,7 @@ func evalIndexExpression(node *ast.IndexExpression, left, index object.Object) o
 		return evalArrayIndexExpression(node, left, index)
 	}
 
-	return newError(node.Token.Line, node.Token.Column, "not an array")
+	return newErrorAtNode(node, "not an array")
 }
 
 func evalArrayIndexExpression(node *ast.IndexExpression, array, index object.Object) object.Object {
@@ -422,7 +422,7 @@ func evalArrayIndexExpression(node *ast.IndexExpression, array, index object.Obj
 	max := len(arrayObject.Elements) - 1
 
 	if idx < 0 || idx > max {
-		return newError(node.Token.Line, node.Token.Column, "index out of range: %d", idx)
+		return newErrorAtNode(node, "index out of range: %d", idx)
 	}
 
 	return arrayObject.Elements[idx]
@@ -469,23 +469,18 @@ func evalIndexAssign(
 
 	array, ok := arrayObj.(*object.Array)
 	if !ok {
-		return newError(left.Token.Line, left.Token.Column, "not an array")
+		return newErrorAtNode(left, "not an array")
 	}
 
 	index, ok := indexObj.(*object.Integer)
 	if !ok {
-		return newError(left.Token.Line, left.Token.Column, "index is not an integer")
+		return newErrorAtNode(left, "index is not an integer")
 	}
 
 	idx := index.Value
 
 	if idx < 0 || idx >= (len(array.Elements)) {
-		return newError(
-			left.Token.Line,
-			left.Token.Column,
-			"index out of range: %d",
-			idx,
-		)
+		return newErrorAtNode(left, "index out of range: %d", idx)
 	}
 
 	array.Elements[idx] = val

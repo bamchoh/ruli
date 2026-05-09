@@ -10,10 +10,10 @@ import (
 )
 
 func main() {
-	input := `
-print(1)
-undefined
-print(2)	`
+	input := `nums := [1,2,3]
+print(len(nums))
+print(nums[10])
+`
 
 	l := lexer.New(input)
 	p := parser.New(l)

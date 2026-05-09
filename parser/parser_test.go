@@ -76,7 +76,7 @@ func testVarDeclStatement(t *testing.T, s ast.Statement, name string, expectedTy
 		return false
 	}
 
-	if varDecl.Name != name {
+	if varDecl.Name.Value != name {
 		t.Errorf("varDecl.Name not %s. got=%s", name, varDecl.Name)
 		return false
 	}
@@ -576,7 +576,7 @@ func TestArrayIndexExpression(t *testing.T) {
 	if varDecl, ok := stmt.(*ast.VarDeclStatement); !ok {
 		t.Fatalf("stmt not *ast.VarDeclStatement. got=%T", stmt)
 	} else {
-		if varDecl.Name != "nums" {
+		if varDecl.Name.Value != "nums" {
 			t.Fatalf("Name not as expected. got=%s", varDecl.Name)
 		}
 		if arrayLit, ok := varDecl.Value.(*ast.ArrayLiteral); !ok {
@@ -606,7 +606,7 @@ func TestArrayIndexExpression(t *testing.T) {
 	if assignStmt, ok := stmt.(*ast.VarDeclStatement); !ok {
 		t.Fatalf("stmt not *ast.VarDeclStatement. got=%T", stmt)
 	} else {
-		if assignStmt.Name != "x" {
+		if assignStmt.Name.Value != "x" {
 			t.Fatalf("Name not as expected. got=%s", assignStmt.Name)
 		}
 
