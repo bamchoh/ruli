@@ -6,6 +6,11 @@ import (
 	"ruli/object"
 )
 
+var (
+	TRUE  = &object.Boolean{Value: true}
+	FALSE = &object.Boolean{Value: false}
+)
+
 var builtins = map[string]*object.Builtin{
 	"print": {
 		Fn: func(args ...object.Object) (object.Object, error) {
@@ -69,6 +74,9 @@ func Eval(node ast.Node, env *object.Environment) object.Object {
 
 	case *ast.StringLiteral:
 		return &object.String{Value: node.Value}
+
+	case *ast.BooleanLiteral:
+		return nativeBoolToBooleanObject(node.Value)
 
 	case *ast.Identifier:
 		if b, ok := builtins[node.Value]; ok {
@@ -201,13 +209,13 @@ func evalIntegerBinaryExpression(operator string, left, right object.Object) obj
 		return &object.Integer{Value: lv / rv}
 
 	case ">":
-		return &object.Boolean{Value: lv > rv}
+		return nativeBoolToBooleanObject(lv > rv)
 	case "<":
-		return &object.Boolean{Value: lv < rv}
+		return nativeBoolToBooleanObject(lv < rv)
 	case "==":
-		return &object.Boolean{Value: lv == rv}
+		return nativeBoolToBooleanObject(lv == rv)
 	case "!=":
-		return &object.Boolean{Value: lv != rv}
+		return nativeBoolToBooleanObject(lv != rv)
 	}
 
 	return &object.Null{}
@@ -231,9 +239,9 @@ func evalStringInfixExpression(operator string, left, right object.Object) objec
 
 func nativeBoolToBooleanObject(input bool) *object.Boolean {
 	if input {
-		return &object.Boolean{Value: true}
+		return TRUE
 	}
-	return &object.Boolean{Value: false}
+	return FALSE
 }
 
 func evalBlockStatement(block *ast.BlockStatement, env *object.Environment) object.Object {

@@ -386,3 +386,18 @@ func (ie *IndexExpression) String() string {
 func (ie *IndexExpression) GetToken() lexer.Token {
 	return ie.Token
 }
+
+type BooleanLiteral struct {
+	Token lexer.Token
+	Value bool
+}
+
+func (bl *BooleanLiteral) expressionNode() {}
+
+func (bl *BooleanLiteral) String() string {
+	return fmt.Sprintf("%t", bl.Value)
+}
+
+func (bl *BooleanLiteral) GetToken() lexer.Token {
+	return bl.Token
+}
