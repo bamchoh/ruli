@@ -6,8 +6,8 @@ type Type struct {
 	Name string
 
 	// 関数型のシグネチャ (Name == FUNCTION のときのみ有効)
-	Params []Type
-	Return *Type
+	Params  []Type
+	Returns []*Type // 複数戻り値 (SPEC 5.3)。空なら戻り値なし
 
 	// 配列の要素型 (Name == ARRAY のときのみ有効)
 	Elem *Type
@@ -55,17 +55,28 @@ func (t *Type) Equal(other *Type) bool {
 			}
 		}
 	case FUNCTION_TYPE.Name:
-		if (t.Return == nil) != (other.Return == nil) {
+		if len(t.Returns) != len(other.Returns) {
 			return false
 		}
-		if !t.Return.Equal(other.Return) {
-			return false
+		for i := range t.Returns {
+			if !t.Returns[i].Equal(other.Returns[i]) {
+				return false
+			}
 		}
 		if len(t.Params) != len(other.Params) {
 			return false
 		}
 		for i := range t.Params {
 			if t.Params[i].Name != other.Params[i].Name {
+				return false
+			}
+		}
+	case MULTI_TYPE.Name:
+		if len(t.Returns) != len(other.Returns) {
+			return false
+		}
+		for i := range t.Returns {
+			if !t.Returns[i].Equal(other.Returns[i]) {
 				return false
 			}
 		}
@@ -87,6 +98,7 @@ var (
 	ANY_TYPE = &Type{Name: "ANY"}
 	// STRUCT_TYPE は struct 型。シグネチャ (フィールド) は必ず上書きして使う
 	STRUCT_TYPE = &Type{Name: "STRUCT", Fields: map[string]*Type{}}
+	MULTI_TYPE  = &Type{Name: "MULTI"} // 複数戻り値 (Returns を必ず設定)
 )
 
 // IEC61131 固定幅整数型 (SPEC 4.1) — 値モデルは INT と共有 (Go int)

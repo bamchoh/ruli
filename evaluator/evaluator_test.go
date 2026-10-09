@@ -442,3 +442,48 @@ x`,
 		t,
 	)
 }
+
+func TestMultiReturnValues(t *testing.T) {
+	testEvalInteger(
+		`func div(a: INT, b: INT) (INT, BOOL) {
+	return a / b, b != 0
+}
+x, ok := div(10, 2)
+x`,
+		5,
+		t,
+	)
+	testEvalBool(
+		`func div(a: INT, b: INT) (INT, BOOL) {
+	return a / b, b != 0
+}
+x, ok := div(10, 2)
+ok`,
+		true,
+		t,
+	)
+}
+
+func TestMultiReturnInvalidBinding(t *testing.T) {
+	// SPEC 5.4: 複数戻り値の単一束縛はランタイムエラー
+	(testEvalError)(
+		`func f() (INT, BOOL) {
+	return 1, true
+}
+y := f()`,
+		"cannot assign 2 values to 1 variables",
+		t,
+	)
+}
+
+func TestModOperator(t *testing.T) {
+	testEvalInteger(`17 % 5`, 2, t)
+
+	evaluated := testEval(`17 % 0`)
+	if !isError(evaluated) {
+		t.Fatal("expected error for 17 % 0")
+	}
+	if msg := evaluated.(*object.Error).Message; msg != "division by zero" {
+		t.Fatalf("wrong error. got=%s", msg)
+	}
+}

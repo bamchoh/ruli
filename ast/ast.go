@@ -330,11 +330,11 @@ type Parameter struct {
 }
 
 type FunctionStatement struct {
-	Token      lexer.Token
-	Name       string
-	Parameters []Parameter
-	ReturnType string
-	Body       *BlockStatement
+	Token       lexer.Token
+	Name        string
+	Parameters  []Parameter
+	ReturnTypes []string // 複数戻り値 (SPEC 5.3)。空なら戻り値なし
+	Body        *BlockStatement
 }
 
 func (fs *FunctionStatement) statementNode() {}
@@ -347,19 +347,80 @@ func (fs *FunctionStatement) GetToken() lexer.Token {
 	return fs.Token
 }
 
+// ReturnStatement は単一 / 複数 (SPEC 5.3) の戻り値
 type ReturnStatement struct {
-	Token lexer.Token
-	Value Expression
+	Token  lexer.Token
+	Values []Expression
 }
 
 func (rs *ReturnStatement) statementNode() {}
 
 func (rs *ReturnStatement) String() string {
-	return "return"
+	var out strings.Builder
+	out.WriteString("return")
+	for i, v := range rs.Values {
+		if i > 0 {
+			out.WriteString(",")
+		}
+		out.WriteString(" " + v.String())
+	}
+	return out.String()
 }
 
 func (rs *ReturnStatement) GetToken() lexer.Token {
 	return rs.Token
+}
+
+// MultiVarDeclStatement は x, ok := f() のような複数変数の束縛 (SPEC 5.4)
+type MultiVarDeclStatement struct {
+	Token  lexer.Token
+	Names  []*Identifier
+	Values Expression // 多値 (MultiValue) を評価する式
+}
+
+func (mv *MultiVarDeclStatement) statementNode() {}
+
+func (mv *MultiVarDeclStatement) String() string {
+	var out strings.Builder
+	for i, name := range mv.Names {
+		if i > 0 {
+			out.WriteString(", ")
+		}
+		out.WriteString(name.String())
+	}
+	out.WriteString(" := ")
+	out.WriteString(mv.Values.String())
+	return out.String()
+}
+
+func (mv *MultiVarDeclStatement) GetToken() lexer.Token {
+	return mv.Token
+}
+
+// MultiAssignStatement は x, ok = f() のような複数変数への再代入
+type MultiAssignStatement struct {
+	Token lexer.Token
+	Lefts []Expression
+	Value Expression
+}
+
+func (ma *MultiAssignStatement) statementNode() {}
+
+func (ma *MultiAssignStatement) String() string {
+	var out strings.Builder
+	for i, left := range ma.Lefts {
+		if i > 0 {
+			out.WriteString(", ")
+		}
+		out.WriteString(left.String())
+	}
+	out.WriteString(" = ")
+	out.WriteString(ma.Value.String())
+	return out.String()
+}
+
+func (ma *MultiAssignStatement) GetToken() lexer.Token {
+	return ma.Token
 }
 
 type StringLiteral struct {

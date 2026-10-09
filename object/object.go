@@ -114,6 +114,7 @@ const (
 	STRING_OBJ   = "STRING"
 	ARRAY_OBJ    = "ARRAY"
 	STRUCT_OBJ   = "STRUCT"
+	MULTI_OBJ    = "MULTI"
 	ERROR_OBJ    = "ERROR"
 )
 
@@ -190,8 +191,9 @@ func (f *Function) Inspect() string {
 	return "function"
 }
 
+// ReturnValue は return 文の制御信号。複数戻り値 (SPEC 5.3) もここに保持する
 type ReturnValue struct {
-	Value Object
+	Values []Object
 }
 
 func (rv *ReturnValue) Type() ObjectType {
@@ -199,7 +201,39 @@ func (rv *ReturnValue) Type() ObjectType {
 }
 
 func (rv *ReturnValue) Inspect() string {
-	return rv.Value.Inspect()
+	var out strings.Builder
+	out.WriteString("(")
+	for i, v := range rv.Values {
+		if i > 0 {
+			out.WriteString(", ")
+		}
+		out.WriteString(v.Inspect())
+	}
+	out.WriteString(")")
+	return out.String()
+}
+
+// MultiValue は複数戻り値の関数呼び出し結果の一時値。
+// 束縛先の変数リストと個数が合わなければエラー (SPEC 5.4)
+type MultiValue struct {
+	Values []Object
+}
+
+func (m *MultiValue) Type() ObjectType {
+	return MULTI_OBJ
+}
+
+func (m *MultiValue) Inspect() string {
+	var out strings.Builder
+	out.WriteString("(")
+	for i, v := range m.Values {
+		if i > 0 {
+			out.WriteString(", ")
+		}
+		out.WriteString(v.Inspect())
+	}
+	out.WriteString(")")
+	return out.String()
 }
 
 type String struct {

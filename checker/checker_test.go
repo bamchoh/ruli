@@ -382,3 +382,39 @@ func TestCheckPrefixExpression(t *testing.T) {
 		t.Fatalf("unexpected errors: %v", errs)
 	}
 }
+
+func TestCheckMultiReturnValid(t *testing.T) {
+	input := `func div(a: INT, b: INT) (INT, BOOL) {
+	return a / b, b != 0
+}
+
+x, ok := div(10, 2)
+x, ok = div(15, 3)
+div(10, 2)
+print(x)`
+	if errs := Check(parseInput(input)); len(errs) > 0 {
+		t.Fatalf("unexpected errors: %v", errs)
+	}
+}
+
+func TestCheckMultiReturnSingleVar(t *testing.T) {
+	// SPEC 5.4: 複数戻り値を単一変数へ代入は禁止
+	testCheckErrors(
+		`func div(a: INT, b: INT) (INT, BOOL) {
+	return a / b, b != 0
+}
+y := div(10, 2)`,
+		[]string{"cannot assign 2 return values to 1 variables"},
+		t,
+	)
+}
+
+func TestCheckReturnCount(t *testing.T) {
+	testCheckErrors(
+		`func div(a: INT, b: INT) (INT, BOOL) {
+	return a
+}`,
+		[]string{"wrong number of return values. got=1, want=2"},
+		t,
+	)
+}

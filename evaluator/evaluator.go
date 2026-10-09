@@ -2,6 +2,7 @@ package evaluator
 
 import (
 	"fmt"
+	"math"
 	"ruli/ast"
 	"ruli/object"
 )
@@ -71,6 +72,16 @@ func Eval(node ast.Node, env *object.Environment) object.Object {
 			val = zeroValueForTypeNode(node.Type, env)
 		default:
 			val = &object.Null{}
+		}
+
+		// SPEC 5.4: 複数戻り値の単一変数への束縛は禁止
+		if mv, ok := val.(*object.MultiValue); ok {
+			return newErrorAtNode(
+				node,
+				"cannot assign %d values to %d variables",
+				len(mv.Values),
+				1,
+			)
 		}
 
 		// 型名が明示された宣言は実行時幅チェックの対象になる (x : INT = 10)
@@ -179,11 +190,29 @@ func Eval(node ast.Node, env *object.Environment) object.Object {
 		return fn
 
 	case *ast.ReturnStatement:
+		values := make([]object.Object, 0, len(node.Values))
+		for _, valueExpr := range node.Values {
+			val := Eval(valueExpr, env)
+			if isError(val) {
+				return val
+			}
+			values = append(values, val)
+		}
+		return &object.ReturnValue{Values: values}
+
+	case *ast.MultiVarDeclStatement:
+		val := Eval(node.Values, env)
+		if isError(val) {
+			return val
+		}
+		return bindMultiValues(node, namesOf(node.Names), val, env, false)
+
+	case *ast.MultiAssignStatement:
 		val := Eval(node.Value, env)
 		if isError(val) {
 			return val
 		}
-		return &object.ReturnValue{Value: val}
+		return bindMultiValues(node, node.Lefts, val, env, true)
 
 	case *ast.ArrayLiteral:
 		var elements []object.Object
@@ -209,6 +238,63 @@ func Eval(node ast.Node, env *object.Environment) object.Object {
 	}
 
 	return newErrorAtNode(node, "unsupported node type: %T", node)
+}
+
+func namesOf(names []*ast.Identifier) []ast.Expression {
+	out := make([]ast.Expression, 0, len(names))
+	for _, name := range names {
+		out = append(out, name)
+	}
+	return out
+}
+
+// bindMultiValues は複数戻り値を変数リストへ束縛する (SPEC 5.4)。
+// 個数が合わない、または多値でない値の複数束縛はエラー
+func bindMultiValues(
+	node ast.Node,
+	names []ast.Expression,
+	val object.Object,
+	env *object.Environment,
+	assign bool,
+) object.Object {
+
+	values := []object.Object{val}
+	if mv, ok := val.(*object.MultiValue); ok {
+		values = mv.Values
+	}
+
+	if len(values) != len(names) {
+		return newErrorAtNode(
+			node,
+			"cannot assign %d values to %d variables",
+			len(values),
+			len(names),
+		)
+	}
+
+	for i, name := range names {
+		ident, ok := name.(*ast.Identifier)
+		if !ok {
+			return newErrorAtNode(name, "invalid assignment target")
+		}
+
+		stored := bindValue(values[i])
+
+		if assign {
+			if typeName, ok := env.VarType(ident.Value); ok {
+				if errObj := checkWidth(name, typeName, stored); errObj != nil {
+					return errObj
+				}
+			}
+			if !env.Assign(ident.Value, stored) {
+				return newErrorAtNode(name, "undefined variable: %s", ident.Value)
+			}
+		} else {
+			env.Set(ident.Value, stored)
+		}
+	}
+
+	return &object.Null{}
 }
 
 func evalProgram(program *ast.Program, env *object.Environment) object.Object {
@@ -274,6 +360,11 @@ func evalIntegerBinaryExpression(
 			return newErrorAtNode(be, "division by zero")
 		}
 		return &object.Integer{Value: lv / rv}
+	case "%":
+		if rv == 0 {
+			return newErrorAtNode(be, "division by zero")
+		}
+		return &object.Integer{Value: lv % rv}
 
 	case ">":
 		return nativeBoolToBooleanObject(lv > rv)
@@ -308,6 +399,11 @@ func evalRealBinaryExpression(
 			return newErrorAtNode(be, "division by zero")
 		}
 		return &object.Real{Value: lv / rv}
+	case "%":
+		if rv == 0 {
+			return newErrorAtNode(be, "division by zero")
+		}
+		return &object.Real{Value: math.Mod(lv, rv)}
 
 	case ">":
 		return nativeBoolToBooleanObject(lv > rv)
@@ -676,7 +772,10 @@ func applyFunction(fn *object.Function, args []object.Object) object.Object {
 	}
 
 	if rv, ok := result.(*object.ReturnValue); ok {
-		return rv.Value
+		if len(rv.Values) == 1 {
+			return rv.Values[0]
+		}
+		return &object.MultiValue{Values: rv.Values}
 	}
 
 	return result

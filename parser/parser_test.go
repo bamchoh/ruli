@@ -463,8 +463,8 @@ func TestFunction1Statement(t *testing.T) {
 			t.Fatalf("Parameter 2 not as expected. got=%s %s", param2.Name, param2.Type)
 		}
 
-		if funcStmt.ReturnType != "INT" {
-			t.Fatalf("Return type not as expected. got=%s", funcStmt.ReturnType)
+		if len(funcStmt.ReturnTypes) != 1 || funcStmt.ReturnTypes[0] != "INT" {
+			t.Fatalf("Return type not as expected. got=%v", funcStmt.ReturnTypes)
 		}
 
 		if len(funcStmt.Body.Statements) != 1 {
@@ -477,7 +477,7 @@ func TestFunction1Statement(t *testing.T) {
 		if returnStmt, ok := bodyStmt.(*ast.ReturnStatement); !ok {
 			t.Fatalf("bodyStmt not *ast.ReturnStatement. got=%T", bodyStmt)
 		} else {
-			if !testInfixExpression(t, returnStmt.Value, "a", "+", "b") {
+			if !testInfixExpression(t, returnStmt.Values[0], "a", "+", "b") {
 				t.Fatalf("Return value not as expected")
 			}
 		}
@@ -522,8 +522,8 @@ func TestFunction2Statement(t *testing.T) {
 			t.Fatalf("Parameter 2 not as expected. got=%s %s", param2.Name, param2.Type)
 		}
 
-		if funcStmt.ReturnType != "" {
-			t.Fatalf("Return type not as expected. got=%s", funcStmt.ReturnType)
+		if len(funcStmt.ReturnTypes) != 0 {
+			t.Fatalf("Return type not as expected. got=%v", funcStmt.ReturnTypes)
 		}
 
 		if len(funcStmt.Body.Statements) != 1 {
@@ -869,5 +869,66 @@ func TestNestedSelectorExpression(t *testing.T) {
 	}
 	if sel.Object.(*ast.SelectorExpression).Field != "motor" {
 		t.Fatalf("inner field not motor")
+	}
+}
+
+func TestMultiReturnFunction(t *testing.T) {
+	input := `func div(a: INT, b: INT) (INT, BOOL) {
+	return a / b, b != 0
+}`
+
+	l := lexer.New(input)
+	p := New(l)
+	program := p.ParseProgram()
+	if len(p.Errors()) != 0 {
+		t.Fatalf("unexpected parse errors: %v", p.Errors())
+	}
+	if len(program.Statements) != 1 {
+		t.Fatalf("program.Statements does not contain 1 statement. got=%d", len(program.Statements))
+	}
+
+	fn, ok := program.Statements[0].(*ast.FunctionStatement)
+	if !ok {
+		t.Fatalf("stmt not *ast.FunctionStatement. got=%T", program.Statements[0])
+	}
+	if len(fn.ReturnTypes) != 2 || fn.ReturnTypes[0] != "INT" || fn.ReturnTypes[1] != "BOOL" {
+		t.Fatalf("ReturnTypes not as expected. got=%v", fn.ReturnTypes)
+	}
+}
+
+func TestMultiVarDeclStatement(t *testing.T) {
+	l := lexer.New(`x, ok := div(10, 2)`)
+	p := New(l)
+	program := p.ParseProgram()
+	if len(p.Errors()) != 0 {
+		t.Fatalf("unexpected parse errors: %v", p.Errors())
+	}
+	if len(program.Statements) != 1 {
+		t.Fatalf("program.Statements does not contain 1 statement. got=%d", len(program.Statements))
+	}
+
+	stmt, ok := program.Statements[0].(*ast.MultiVarDeclStatement)
+	if !ok {
+		t.Fatalf("stmt not *ast.MultiVarDeclStatement. got=%T", program.Statements[0])
+	}
+	if len(stmt.Names) != 2 || stmt.Names[0].Value != "x" || stmt.Names[1].Value != "ok" {
+		t.Fatalf("Names not as expected")
+	}
+}
+
+func TestMultiAssignStatement(t *testing.T) {
+	l := lexer.New(`x, ok = div(10, 2)`)
+	p := New(l)
+	program := p.ParseProgram()
+	if len(p.Errors()) != 0 {
+		t.Fatalf("unexpected parse errors: %v", p.Errors())
+	}
+
+	stmt, ok := program.Statements[0].(*ast.MultiAssignStatement)
+	if !ok {
+		t.Fatalf("stmt not *ast.MultiAssignStatement. got=%T", program.Statements[0])
+	}
+	if len(stmt.Lefts) != 2 {
+		t.Fatalf("Lefts does not contain 2. got=%d", len(stmt.Lefts))
 	}
 }

@@ -26,6 +26,7 @@ var precedences = map[lexer.TokenType]int{
 	lexer.MINUS:    SUM,
 	lexer.ASTERISK: PRODUCT,
 	lexer.SLASH:    PRODUCT,
+	lexer.MOD:      PRODUCT,
 	lexer.LPAREN:   CALL,
 	lexer.LBRACKET: INDEX,
 }
@@ -85,6 +86,7 @@ func New(l *lexer.Lexer) *Parser {
 	p.registerInfix(lexer.MINUS, p.parseInfixExpression)
 	p.registerInfix(lexer.ASTERISK, p.parseInfixExpression)
 	p.registerInfix(lexer.SLASH, p.parseInfixExpression)
+	p.registerInfix(lexer.MOD, p.parseInfixExpression)
 	p.registerInfix(lexer.EQ, p.parseInfixExpression)
 	p.registerInfix(lexer.NOT_EQ, p.parseInfixExpression)
 	p.registerInfix(lexer.LT, p.parseInfixExpression)
@@ -185,6 +187,11 @@ func (p *Parser) parseStatement() ast.Statement {
 
 	case lexer.IDENT:
 
+		// 複数代入先: x, ok := f() / x, ok = f()
+		if p.peekToken.Type == lexer.COMMA {
+			return p.parseMultiStatement()
+		}
+
 		switch p.peekToken.Type {
 
 		case lexer.DECLARE, lexer.COLON:
@@ -198,6 +205,50 @@ func (p *Parser) parseStatement() ast.Statement {
 	}
 
 	return p.parseAssignOrExpressionStatement()
+}
+
+// parseMultiStatement は x, ok := f() / x, ok = f() をパースする (SPEC 5.4)
+func (p *Parser) parseMultiStatement() ast.Statement {
+	names := []*ast.Identifier{{
+		Token: p.curToken,
+		Value: p.curToken.Literal,
+	}}
+
+	for p.peekToken.Type == lexer.COMMA {
+		p.nextToken() // ,
+		p.nextToken() // next identifier
+		names = append(names, &ast.Identifier{
+			Token: p.curToken,
+			Value: p.curToken.Literal,
+		})
+	}
+
+	switch p.peekToken.Type {
+	case lexer.DECLARE:
+		p.nextToken() // :=
+		p.nextToken() // value first token
+		return &ast.MultiVarDeclStatement{
+			Token:  names[0].Token,
+			Names:  names,
+			Values: p.parseExpression(LOWEST),
+		}
+
+	case lexer.ASSIGN:
+		p.nextToken() // =
+		p.nextToken() // value first token
+		lefts := make([]ast.Expression, 0, len(names))
+		for _, name := range names {
+			lefts = append(lefts, name)
+		}
+		return &ast.MultiAssignStatement{
+			Token: names[0].Token,
+			Lefts: lefts,
+			Value: p.parseExpression(LOWEST),
+		}
+	}
+
+	p.errorAtPeek("expected ':=' or '=', got '%s'", tokenLabel(p.peekToken))
+	return nil
 }
 
 // parseAssignOrExpressionStatement は式を 1 つパースする。
@@ -317,6 +368,18 @@ func (p *Parser) parseIntegerLiteral() ast.Expression {
 		Token: p.curToken,
 		Value: int(value),
 	}
+}
+
+// typeNames は有効な型名 (SPEC 4.1 / 4.3 の基本型)
+var typeNames = map[string]bool{
+	"INT": true, "SINT": true, "USINT": true, "BYTE": true,
+	"UINT": true, "WORD": true, "DINT": true, "UDINT": true,
+	"DWORD": true, "LINT": true, "ULINT": true, "LWORD": true,
+	"REAL": true, "LREAL": true, "BOOL": true, "STRING": true,
+}
+
+func resolveTypeName(tok lexer.Token) (string, bool) {
+	return tok.Literal, typeNames[tok.Literal]
 }
 
 // castableTypes はキャスト可能な型名 (SPEC 6.3: REAL(a) のような明示キャスト)
@@ -664,7 +727,14 @@ func (p *Parser) parseReturnStatement() *ast.ReturnStatement {
 	}
 
 	p.nextToken()
-	stmt.Value = p.parseExpression(LOWEST)
+	stmt.Values = append(stmt.Values, p.parseExpression(LOWEST))
+
+	// 複数戻り値 (SPEC 5.3): return a % b, b != 0
+	for p.peekToken.Type == lexer.COMMA {
+		p.nextToken() // ,
+		p.nextToken() // next value first token
+		stmt.Values = append(stmt.Values, p.parseExpression(LOWEST))
+	}
 
 	return stmt
 }
@@ -688,7 +758,30 @@ func (p *Parser) parseFunctionStatement() *ast.FunctionStatement {
 	// 戻り値型省略可
 	if p.peekToken.Type == lexer.IDENT {
 		p.nextToken()
-		stmt.ReturnType = p.curToken.Literal
+		stmt.ReturnTypes = []string{p.curToken.Literal}
+	}
+
+	// 複数戻り値型 (SPEC 5.3): (INT, BOOL)
+	if p.peekToken.Type == lexer.LPAREN {
+		p.nextToken() // (
+		p.nextToken() // first return type
+
+		for p.curToken.Type != lexer.RPAREN && p.curToken.Type != lexer.EOF {
+			if p.curToken.Type == lexer.COMMA {
+				p.nextToken()
+				continue
+			}
+
+			if _, ok := resolveTypeName(p.curToken); !ok {
+				p.errorAt(p.curToken, "unknown type '%s'", tokenLabel(p.curToken))
+			}
+			stmt.ReturnTypes = append(stmt.ReturnTypes, p.curToken.Literal)
+			p.nextToken() // next return type or )
+		}
+
+		if p.curToken.Type == lexer.EOF {
+			p.errorAt(p.curToken, "expected ')', got EOF")
+		}
 	}
 
 	if !p.expectPeek(lexer.LBRACE) {

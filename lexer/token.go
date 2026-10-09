@@ -29,6 +29,7 @@ const (
 	BANG     = "!"
 	ASTERISK = "*"
 	SLASH    = "/"
+	MOD      = "%"
 
 	SEMICOLON = ";"
 

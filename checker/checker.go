@@ -25,9 +25,9 @@ type Checker struct {
 	// struct 型宣言のレジストリ (型名 → 型)
 	types map[string]*Type
 
-	// 現在チェック中の関数の戻り値型 (関数外なら nil)
-	returnType *Type
-	inFunction bool
+	// 現在チェック中の関数の戻り値型 (関数外なら nil / 空)
+	returnTypes []*Type
+	inFunction  bool
 
 	errors []TypeError
 }
@@ -88,6 +88,10 @@ func (c *Checker) checkStatement(n ast.Statement, env *Env) {
 		c.checkFunctionBody(stmt, env)
 	case *ast.ReturnStatement:
 		c.checkReturn(stmt, env)
+	case *ast.MultiVarDeclStatement:
+		c.checkMultiVarDecl(stmt, env)
+	case *ast.MultiAssignStatement:
+		c.checkMultiAssign(stmt, env)
 	case *ast.ExpressionStatement:
 		c.checkExpr(stmt.Expression, env)
 	case *ast.TypeDeclStatement:
@@ -198,6 +202,17 @@ func (c *Checker) checkVarDecl(stmt *ast.VarDeclStatement, env *Env) {
 	case stmt.Value != nil:
 		vt := c.checkExpr(stmt.Value, env)
 		if vt == nil {
+			return
+		}
+
+		// SPEC 5.4: 複数戻り値を単一変数へ代入は禁止
+		if vt.Name == MULTI_TYPE.Name {
+			c.errAt(
+				stmt.GetToken(),
+				"cannot assign %d return values to %d variables",
+				len(vt.Returns),
+				1,
+			)
 			return
 		}
 
@@ -333,24 +348,166 @@ func (c *Checker) checkAssign(stmt *ast.AssignStatement, env *Env) {
 	}
 }
 
+// checkMultiVarDecl は x, ok := f() のような複数変数の束縛を検査する (SPEC 5.4)
+func (c *Checker) checkMultiVarDecl(stmt *ast.MultiVarDeclStatement, env *Env) {
+	vt := c.checkExpr(stmt.Values, env)
+	if vt == nil {
+		return
+	}
+
+	names := make([]ast.Expression, 0, len(stmt.Names))
+	for _, name := range stmt.Names {
+		names = append(names, name)
+	}
+
+	c.checkMultiBind(stmt, names, vt, env, true)
+}
+
+// checkMultiAssign は x, ok = f() のような複数代入を検査する
+func (c *Checker) checkMultiAssign(stmt *ast.MultiAssignStatement, env *Env) {
+	vt := c.checkExpr(stmt.Value, env)
+	if vt == nil {
+		return
+	}
+
+	names := make([]ast.Expression, 0, len(stmt.Lefts))
+	for _, left := range stmt.Lefts {
+		ident, ok := left.(*ast.Identifier)
+		if !ok {
+			c.errAt(left.GetToken(), "invalid assignment target")
+			return
+		}
+		names = append(names, ident)
+	}
+
+	c.checkMultiBind(stmt, names, vt, env, false)
+}
+
+// checkMultiBind は束縛先の個数と型を検査する
+func (c *Checker) checkMultiBind(node ast.Node, names []ast.Expression, vt *Type, env *Env, declare bool) {
+	count := len(names)
+
+	if vt.Name == MULTI_TYPE.Name {
+		if len(vt.Returns) != count {
+			c.errAt(
+				astNodeToken(node),
+				"cannot assign %d return values to %d variables",
+				len(vt.Returns),
+				count,
+			)
+			return
+		}
+
+		for i := range vt.Returns {
+			ident := names[i].(*ast.Identifier)
+
+			if declare {
+				c.checkDeclName(names[i], vt.Returns[i])
+				env.Set(ident.Value, vt.Returns[i])
+				continue
+			}
+
+			declared, ok := env.Get(ident.Value)
+			if !ok {
+				c.errAt(names[i].GetToken(), "undefined variable: %s", ident.Value)
+				continue
+			}
+			if !declared.Equal(vt.Returns[i]) {
+				c.errAt(
+					names[i].GetToken(),
+					"type mismatch: declared %s, got %s",
+					declared.Name,
+					vt.Returns[i].Name,
+				)
+			}
+		}
+		return
+	}
+
+	// 多値でない
+	if count != 1 {
+		c.errAt(
+			astNodeToken(node),
+			"cannot assign %d values to %d variables",
+			1,
+			count,
+		)
+		return
+	}
+
+	ident := names[0].(*ast.Identifier)
+
+	if declare {
+		c.checkDeclName(names[0], vt)
+		env.Set(ident.Value, vt)
+		return
+	}
+
+	declared, ok := env.Get(ident.Value)
+	if !ok {
+		c.errAt(names[0].GetToken(), "undefined variable: %s", ident.Value)
+		return
+	}
+	if !declared.Equal(vt) {
+		c.errAt(
+			names[0].GetToken(),
+			"type mismatch: declared %s, got %s",
+			declared.Name,
+			vt.Name,
+		)
+	}
+}
+
+// checkDeclName は宣言先が識別子であることを確認する
+func (c *Checker) checkDeclName(expr ast.Expression, t *Type) {
+	if _, ok := expr.(*ast.Identifier); !ok {
+		c.errAt(expr.GetToken(), "invalid declaration target")
+	}
+}
+
+func astNodeToken(n ast.Node) lexer.Token {
+	return n.GetToken()
+}
+
 func (c *Checker) checkReturn(stmt *ast.ReturnStatement, env *Env) {
 	if !c.inFunction {
 		c.errAt(stmt.GetToken(), "return outside function")
 		return
 	}
 
-	vt := c.checkExpr(stmt.Value, env)
-	if vt == nil {
+	valueTypes := make([]*Type, 0, len(stmt.Values))
+	for _, value := range stmt.Values {
+		vt := c.checkExpr(value, env)
+		if vt == nil {
+			return
+		}
+		valueTypes = append(valueTypes, vt)
+	}
+
+	if len(c.returnTypes) == 0 {
+		// 戻り値なし宣言の戻り値は寛容に扱う (v1)
 		return
 	}
 
-	if c.returnType != nil && !c.returnType.Equal(vt) {
+	if len(c.returnTypes) != len(valueTypes) {
 		c.errAt(
 			stmt.GetToken(),
-			"type mismatch: declared %s, got %s",
-			c.returnType.Name,
-			vt.Name,
+			"wrong number of return values. got=%d, want=%d",
+			len(valueTypes),
+			len(c.returnTypes),
 		)
+		return
+	}
+
+	for i := range c.returnTypes {
+		if !c.returnTypes[i].Equal(valueTypes[i]) {
+			c.errAt(
+				stmt.Values[i].GetToken(),
+				"type mismatch: declared %s, got %s",
+				c.returnTypes[i].Name,
+				valueTypes[i].Name,
+			)
+		}
 	}
 }
 
@@ -373,17 +530,17 @@ func (c *Checker) registerFunctionSignature(stmt *ast.FunctionStatement, env *En
 		params = append(params, *t)
 	}
 
-	var ret *Type
-	if stmt.ReturnType != "" {
-		if t, ok := resolveBasic(stmt.ReturnType); ok {
-			ret = t
+	returns := make([]*Type, 0, len(stmt.ReturnTypes))
+	for _, rt := range stmt.ReturnTypes {
+		if t, ok := resolveBasic(rt); ok {
+			returns = append(returns, t)
 		} else {
-			c.errAt(stmt.GetToken(), "unknown type: %s", stmt.ReturnType)
-			ret = UNKNOWN_TYPE
+			c.errAt(stmt.GetToken(), "unknown type: %s", rt)
+			returns = append(returns, UNKNOWN_TYPE)
 		}
 	}
 
-	fn := &Type{Name: FUNCTION_TYPE.Name, Params: params, Return: ret}
+	fn := &Type{Name: FUNCTION_TYPE.Name, Params: params, Returns: returns}
 	env.Set(stmt.Name, fn)
 	return fn
 }
@@ -397,13 +554,13 @@ func (c *Checker) checkFunctionBody(stmt *ast.FunctionStatement, env *Env) {
 		fnEnv.Set(param.Name, &fnType.Params[i])
 	}
 
-	prevReturn, prevInFunction := c.returnType, c.inFunction
-	c.returnType = fnType.Return
+	prevReturn, prevInFunction := c.returnTypes, c.inFunction
+	c.returnTypes = fnType.Returns
 	c.inFunction = true
 
 	c.checkStatements(stmt.Body.Statements, fnEnv)
 
-	c.returnType, c.inFunction = prevReturn, prevInFunction
+	c.returnTypes, c.inFunction = prevReturn, prevInFunction
 }
 
 // checkLiteralRange は整数リテラルが固定幅型の値域に収まっているか検査する
@@ -544,11 +701,11 @@ func (c *Checker) checkExpr(expr ast.Expression, env *Env) *Type {
 		}
 		return array.Elem
 
-	case *ast.CallExpression:
-		return c.checkCall(e, env)
-
 	case *ast.CastExpression:
 		return c.checkCast(e, env)
+
+	case *ast.CallExpression:
+		return c.checkCall(e, env)
 
 	case *ast.PrefixExpression:
 		rt := c.checkExpr(e.Right, env)
@@ -622,7 +779,7 @@ func (c *Checker) checkBinary(be *ast.BinaryExpression, env *Env) *Type {
 	}
 
 	switch be.Operator {
-	case "+", "-", "*", "/":
+	case "+", "-", "*", "/", "%":
 		// SPEC 6.3: INT + REAL はエラー。明示キャスト必須
 		if !lt.Equal(rt) {
 			break
@@ -724,10 +881,14 @@ func (c *Checker) checkCall(e *ast.CallExpression, env *Env) *Type {
 		}
 	}
 
-	if fnType.Return == nil {
+	switch len(fnType.Returns) {
+	case 0:
 		return VOID_TYPE
+	case 1:
+		return fnType.Returns[0]
+	default:
+		return &Type{Name: MULTI_TYPE.Name, Returns: fnType.Returns}
 	}
-	return fnType.Return
 }
 
 // checkCast は REAL(a) のような明示的キャストを検査する (SPEC 6.3)
