@@ -70,8 +70,7 @@ func Eval(node ast.Node, env *object.Environment) object.Object {
 		if isError(val) {
 			return val
 		}
-		evalAssignStatement(node, env)
-		return val
+		return evalAssignStatement(node, val, env)
 
 	case *ast.IntegerLiteral:
 		return &object.Integer{Value: node.Value}
@@ -300,10 +299,13 @@ func nativeBoolToBooleanObject(input bool) *object.Boolean {
 }
 
 func evalBlockStatement(block *ast.BlockStatement, env *object.Environment) object.Object {
+	// {} は新しいスコープを作る (SPEC 3.1 / 3.4: := 宣言は現在スコープに作成)
+	blockEnv := object.NewEnclosedEnvironment(env)
+
 	var result object.Object = &object.Null{}
 
 	for _, stmt := range block.Statements {
-		result = Eval(stmt, env)
+		result = Eval(stmt, blockEnv)
 		if isError(result) {
 			return result
 		}
@@ -379,13 +381,16 @@ func evalIncDecStatement(stmt *ast.IncDecStatement, env *object.Environment) obj
 
 func evalForStatement(stmt *ast.ForStatement, env *object.Environment) object.Object {
 
-	initret := Eval(stmt.Init, env)
+	// for 句 (init で宣言した変数を含む) は for 全体のスコープに閉じる
+	loopEnv := object.NewEnclosedEnvironment(env)
+
+	initret := Eval(stmt.Init, loopEnv)
 	if isError(initret) {
 		return initret
 	}
 
 	for {
-		cond := Eval(stmt.Condition, env)
+		cond := Eval(stmt.Condition, loopEnv)
 		if isError(cond) {
 			return cond
 		}
@@ -394,7 +399,7 @@ func evalForStatement(stmt *ast.ForStatement, env *object.Environment) object.Ob
 			break
 		}
 
-		result := Eval(stmt.Body, env)
+		result := Eval(stmt.Body, loopEnv)
 		if isError(result) {
 			return result
 		}
@@ -407,7 +412,7 @@ func evalForStatement(stmt *ast.ForStatement, env *object.Environment) object.Ob
 				return result
 
 			case object.CONTINUE_OBJ:
-				ret := Eval(stmt.Post, env)
+				ret := Eval(stmt.Post, loopEnv)
 				if isError(ret) {
 					return ret
 				}
@@ -415,7 +420,7 @@ func evalForStatement(stmt *ast.ForStatement, env *object.Environment) object.Ob
 			}
 		}
 
-		postret := Eval(stmt.Post, env)
+		postret := Eval(stmt.Post, loopEnv)
 		if isError(postret) {
 			return postret
 		}
@@ -511,18 +516,17 @@ func evalArrayIndexExpression(node *ast.IndexExpression, array, index object.Obj
 
 func evalAssignStatement(
 	stmt *ast.AssignStatement,
+	val object.Object,
 	env *object.Environment,
 ) object.Object {
-
-	val := Eval(stmt.Value, env)
-	if isError(val) {
-		return val
-	}
 
 	switch left := stmt.Left.(type) {
 
 	case *ast.Identifier:
-		env.Set(left.Value, val)
+		// = は宣言ではなく更新。未定義変数への代入は SPEC 4.1.1 でエラー
+		if !env.Assign(left.Value, val) {
+			return newErrorAtNode(stmt, "undefined variable: %s", left.Value)
+		}
 		return val
 
 	case *ast.IndexExpression:

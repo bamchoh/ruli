@@ -29,8 +29,23 @@ func (e *Environment) Get(name string) (Object, bool) {
 	return v, ok
 }
 
+// Set は現在のスコープに宣言する ( := / type / 関数定義 / 引数束縛 )
+
 func (e *Environment) Set(name string, val Object) {
 	e.store[name] = val
+}
+
+// Assign は既存変数を更新する ( = / ++ / -- )。
+// 変数が見つからないスコープなら親をたどり、どこにも存在しなければ false を返す
+func (e *Environment) Assign(name string, val Object) bool {
+	if _, ok := e.store[name]; ok {
+		e.store[name] = val
+		return true
+	}
+	if e.outer != nil {
+		return e.outer.Assign(name, val)
+	}
+	return false
 }
 
 type ObjectType string

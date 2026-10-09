@@ -130,3 +130,85 @@ func TestErrorHasPosition(t *testing.T) {
 		)
 	}
 }
+
+func TestBlockScopeShadowing(t *testing.T) {
+	// SPEC 3.5: ブロック内の := は外側を汚さない
+	testEvalInteger(
+		`x := 10
+if true {
+	x := 20
+}
+x`,
+		10,
+		t,
+	)
+}
+
+func TestAssignThroughOuterScope(t *testing.T) {
+	testEvalInteger(
+		`x := 10
+if true {
+	x = 20
+}
+x`,
+		20,
+		t,
+	)
+}
+
+func TestAssignUndefinedVariable(t *testing.T) {
+	testEvalError(
+		`y := 1
+x = 10`,
+		"undefined variable: x",
+		t,
+	)
+}
+
+func TestForInitScopeDoesNotLeak(t *testing.T) {
+	testEvalError(
+		`for i := 0; i < 2; i++ {
+}
+i`,
+		"identifier not found: i",
+		t,
+	)
+}
+
+func TestIncDecThroughBlockScope(t *testing.T) {
+	testEvalInteger(
+		`x := 10
+for i := 0; i < 3; i++ {
+	x++
+}
+x`,
+		13,
+		t,
+	)
+}
+
+func TestFunctionReadsOuterScope(t *testing.T) {
+	// SPEC 12.1: 関数から外側スコープの read/write は許可
+	testEvalInteger(
+		`x := 10
+func inc() INT {
+	x++
+	return x
+}
+inc()
+x`,
+		11,
+		t,
+	)
+}
+
+func TestFunctionParamScope(t *testing.T) {
+	testEvalInteger(
+		`func twice(a: INT) INT {
+	return a * 2
+}
+twice(21)`,
+		42,
+		t,
+	)
+}
