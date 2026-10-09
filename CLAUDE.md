@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ruli（瑠璃）is an embeddable, statically-typed AST-interpreter scripting language written in Go, aimed at control/PLC (IEC 61131-style) use cases. The language spec lives in `docs/SPEC.md` — treat it as the source of truth for intended behavior; the implementation is still catching up to parts of it (e.g. distinct types, structs, fixed-size array types, multi-return functions are specced but not all implemented yet).
 
-Currently there is no file/REPL entry point: `cmd/ruli/main.go` runs a hard-coded sample program through lexer → parser → evaluator. Wire up a new feature by extending that pipeline.
+`cmd/ruli/main.go` is the CLI: `ruli <script>` reads a `.ruli` file, parses it (reporting parse errors to stderr with line/column), and evaluates. There is no REPL yet. Wire up new language features by extending that pipeline.
 
 ## Commands
 
@@ -14,7 +14,7 @@ Currently there is no file/REPL entry point: `cmd/ruli/main.go` runs a hard-code
 - Run all tests: `go test ./...`
 - Run one package's tests: `go test ./parser` (or `./lexer`)
 - Run a single test: `go test ./parser -run TestParserName`
-- Run the interpreter: `go run ./cmd/ruli` (builds the `ruli` binary from `cmd/ruli/main.go`, which executes a hard-coded sample)
+- Run a script: `go run ./cmd/ruli script.ruli` (or build once with `go build -o ruli.exe ./cmd/ruli`, then `./ruli.exe script.ruli`)
 
 CI (`.github/workflows/go.yml`) runs build + `go test ./...` on Go 1.25 for pushes/PRs to main. There are no linters configured.
 
