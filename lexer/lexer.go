@@ -60,7 +60,7 @@ func (l *Lexer) NextToken() Token {
 			l.readChar()
 			tok = l.newToken(NOT_EQ, string(ch)+string(l.ch))
 		} else {
-			tok = l.newToken(ILLEGAL, "!")
+			tok = l.newToken(BANG, "!")
 		}
 
 	case '<':

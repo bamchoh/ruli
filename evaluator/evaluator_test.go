@@ -358,3 +358,87 @@ func TestTypedDeclZeroValues(t *testing.T) {
 	testEvalInteger(`x : INT
 x`, 0, t)
 }
+
+func testEvalBool(input string, expected bool, t *testing.T) {
+	evaluated := testEval(input)
+	if isError(evaluated) {
+		t.Fatalf("unexpected error: %s", evaluated.Inspect())
+	}
+	result, ok := evaluated.(*object.Boolean)
+	if !ok {
+		t.Fatalf("object is not Boolean. got=%T (%+v)", evaluated, evaluated)
+	}
+	if result.Value != expected {
+		t.Fatalf("object has wrong value. got=%t, want=%t", result.Value, expected)
+	}
+}
+
+func TestPrefixExpression(t *testing.T) {
+	testEvalInteger(`-5 + 3`, -2, t)
+	testEvalReal(`-REAL(2)`, -2.0, t)
+	testEvalBool(`!false`, true, t)
+	testEvalBool(`flag := true
+!flag`, false, t)
+}
+
+func TestRuntimeWidthCheckOnAssign(t *testing.T) {
+	// 変数値の代入でも実行時幅チェックが効く
+	testEvalError(
+		`y := 200
+x : SINT = 0
+x = y`,
+		"value 200 out of range for SINT (-128..127)",
+		t,
+	)
+}
+
+func TestRuntimeWidthCheckOnIncDec(t *testing.T) {
+	testEvalError(
+		`x : INT = 32767
+x++`,
+		"value 32768 out of range for INT (-32768..32767)",
+		t,
+	)
+}
+
+func TestRuntimeWidthCheckOnNegation(t *testing.T) {
+	testEvalError(
+		`x : SINT = -128
+x--`,
+		"value -129 out of range for SINT (-128..127)",
+		t,
+	)
+}
+
+func TestRuntimeWidthCheckOnCast(t *testing.T) {
+	// 実数値経由のキャストは実行時に検査される
+	testEvalError(
+		`WORD(REAL(1) * REAL(70000))`,
+		"value 70000 out of range for WORD (0..65535)",
+		t,
+	)
+}
+
+func TestRuntimeWidthCheckOnStructField(t *testing.T) {
+	testEvalError(
+		`type Motor struct {
+	speed: SINT
+}
+
+m : Motor
+y := 200
+m.speed = y`,
+		"value 200 out of range for SINT (-128..127)",
+		t,
+	)
+}
+
+func TestUnaryMinusLiteralWithinRange(t *testing.T) {
+	// 負数リテラルの宣言・代入は可能
+	testEvalInteger(
+		`x : SINT = -128
+x`,
+		-128,
+		t,
+	)
+}

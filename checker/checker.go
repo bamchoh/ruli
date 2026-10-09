@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"ruli/ast"
 	"ruli/lexer"
+	"ruli/object"
 )
 
 // TypeError は型チェックエラー (行列位置つき)
@@ -193,6 +194,7 @@ func (c *Checker) checkVarDecl(stmt *ast.VarDeclStatement, env *Env) {
 	name := stmt.Name.Value
 
 	switch {
+
 	case stmt.Value != nil:
 		vt := c.checkExpr(stmt.Value, env)
 		if vt == nil {
@@ -215,6 +217,7 @@ func (c *Checker) checkVarDecl(stmt *ast.VarDeclStatement, env *Env) {
 				return
 			}
 
+			c.checkLiteralRange(dt.Name, stmt.Value)
 			env.Set(name, dt)
 		} else {
 			env.Set(name, vt)
@@ -403,6 +406,46 @@ func (c *Checker) checkFunctionBody(stmt *ast.FunctionStatement, env *Env) {
 	c.returnType, c.inFunction = prevReturn, prevInFunction
 }
 
+// checkLiteralRange は整数リテラルが固定幅型の値域に収まっているか検査する
+func (c *Checker) checkLiteralRange(typeName string, valueExpr ast.Expression) {
+	// 単項マイナス付きリテラル (x : SINT = -128) は負値リテラルとして扱う
+	if pe, ok := valueExpr.(*ast.PrefixExpression); ok {
+		if pe.Operator != "-" {
+			return
+		}
+		lit, ok := pe.Right.(*ast.IntegerLiteral)
+		if !ok {
+			return // 変数などは実行時に検査する
+		}
+		c.checkIntRange(typeName, -int64(lit.Value), lit.GetToken())
+		return
+	}
+
+	lit, ok := valueExpr.(*ast.IntegerLiteral)
+	if !ok {
+		return // リテラル以外 (変数など) は実行時に検査する
+	}
+	c.checkIntRange(typeName, int64(lit.Value), lit.GetToken())
+}
+
+func (c *Checker) checkIntRange(typeName string, value int64, token lexer.Token) {
+	w, ok := object.WidthOf(typeName)
+	if !ok {
+		return
+	}
+
+	if value < w.Min || value > w.Max {
+		c.errAt(
+			token,
+			"value %d out of range for %s (%d..%d)",
+			value,
+			typeName,
+			w.Min,
+			w.Max,
+		)
+	}
+}
+
 // resolveTypeNode は ast.TypeNode を型に解決する
 func (c *Checker) resolveTypeNode(node ast.TypeNode) *Type {
 	if node == nil {
@@ -506,6 +549,30 @@ func (c *Checker) checkExpr(expr ast.Expression, env *Env) *Type {
 
 	case *ast.CastExpression:
 		return c.checkCast(e, env)
+
+	case *ast.PrefixExpression:
+		rt := c.checkExpr(e.Right, env)
+		if rt == nil {
+			return nil
+		}
+
+		if e.Operator == "!" {
+			if rt.Name != BOOL_TYPE.Name {
+				c.errAt(e.GetToken(), "operand of ! must be BOOL, got %s", rt.Name)
+				return nil
+			}
+			return BOOL_TYPE
+		}
+
+		// "-" : 数値型のみ
+		if rt.Name == ANY_TYPE.Name || rt.Name == UNKNOWN_TYPE.Name {
+			return UNKNOWN_TYPE
+		}
+		if !isNumeric(rt) {
+			c.errAt(e.GetToken(), "operand of - must be numeric, got %s", rt.Name)
+			return nil
+		}
+		return rt
 
 	case *ast.SelectorExpression:
 		ot := c.checkExpr(e.Object, env)
@@ -700,6 +767,8 @@ func (c *Checker) checkCast(e *ast.CastExpression, env *Env) *Type {
 			)
 			return nil
 		}
+		// 整数リテラルの範囲外キャストは静的に検査する (WORD(70000) など)
+		c.checkLiteralRange(target.Name, e.Value)
 	}
 
 	return target

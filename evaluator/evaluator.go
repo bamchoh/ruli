@@ -73,6 +73,15 @@ func Eval(node ast.Node, env *object.Environment) object.Object {
 			val = &object.Null{}
 		}
 
+		// 型名が明示された宣言は実行時幅チェックの対象になる (x : INT = 10)
+		if basic, ok := node.Type.(*ast.BasicType); ok {
+			if errObj := checkWidth(node, basic.Name, val); errObj != nil {
+				return errObj
+			}
+			env.DeclareTyped(node.Name.Value, bindValue(val), basic.Name)
+			return val
+		}
+
 		env.Set(node.Name.Value, bindValue(val))
 		return val
 
@@ -147,6 +156,9 @@ func Eval(node ast.Node, env *object.Environment) object.Object {
 			return obj
 		}
 		return evalSelectorExpression(node, obj)
+
+	case *ast.PrefixExpression:
+		return evalPrefixExpression(node, env)
 
 	case *ast.ExpressionStatement:
 		return Eval(node.Expression, env)
@@ -408,11 +420,22 @@ func evalIncDecStatement(stmt *ast.IncDecStatement, env *object.Environment) obj
 		)
 	}
 
+	proposed := obj.Value
 	if stmt.Operator == "++" {
-		obj.Value++
+		proposed++
 	} else {
-		obj.Value--
+		proposed--
 	}
+
+	// 宣言時型に幅があれば範囲外はエラー (桁あふれない)
+	if typeName, ok := env.VarType(stmt.Name); ok {
+		candidate := &object.Integer{Value: proposed}
+		if errObj := checkWidth(stmt, typeName, candidate); errObj != nil {
+			return errObj
+		}
+	}
+
+	obj.Value = proposed
 
 	return obj
 }
@@ -465,6 +488,34 @@ func evalForStatement(stmt *ast.ForStatement, env *object.Environment) object.Ob
 	}
 
 	return &object.Null{}
+}
+
+// evalPrefixExpression は -x / !flag のような単項演算を実行する
+func evalPrefixExpression(node *ast.PrefixExpression, env *object.Environment) object.Object {
+
+	right := Eval(node.Right, env)
+	if isError(right) {
+		return right
+	}
+
+	switch node.Operator {
+	case "-":
+		switch v := right.(type) {
+		case *object.Integer:
+			return &object.Integer{Value: -v.Value}
+		case *object.Real:
+			return &object.Real{Value: -v.Value}
+		}
+		return newErrorAtNode(node, "operand of - must be numeric, got %s", right.Type())
+
+	case "!":
+		if b, ok := right.(*object.Boolean); ok {
+			return nativeBoolToBooleanObject(!b.Value)
+		}
+		return newErrorAtNode(node, "operand of ! must be BOOL, got %s", right.Type())
+	}
+
+	return newErrorAtNode(node, "unsupported prefix operator: %s", node.Operator)
 }
 
 func evalCallExpression(node *ast.CallExpression, env *object.Environment) object.Object {
@@ -525,14 +576,23 @@ func evalCast(node *ast.CastExpression, val object.Object) object.Object {
 		}
 
 	default:
-		// 整数族へのキャスト (SINT〜LWORD)
+		// 整数族へのキャスト (SINT〜LWORD)。範囲外はエラー (桁あふれはしない)
+		var conv int
 		switch v := val.(type) {
 		case *object.Integer:
-			return v
+			conv = v.Value
 		case *object.Real:
 			// 実数 → 整数は 0 方向へ切り捨て
-			return &object.Integer{Value: int(v.Value)}
+			conv = int(v.Value)
+		default:
+			return newErrorAtNode(node, "invalid cast: %s to %s", val.Type(), target)
 		}
+
+		if errObj := checkWidth(node, target, &object.Integer{Value: conv}); errObj != nil {
+			return errObj
+		}
+
+		return &object.Integer{Value: conv}
 	}
 
 	return newErrorAtNode(node, "invalid cast: %s to %s", val.Type(), target)
@@ -658,7 +718,16 @@ func evalAssignStatement(
 
 	case *ast.Identifier:
 		// = は宣言ではなく更新。未定義変数への代入は SPEC 4.1.1 でエラー
-		if !env.Assign(left.Value, bindValue(val)) {
+		stored := bindValue(val)
+
+		// 宣言時に型が明示された変数は実行時幅チェックを行う
+		if typeName, ok := env.VarType(left.Value); ok {
+			if errObj := checkWidth(stmt, typeName, stored); errObj != nil {
+				return errObj
+			}
+		}
+
+		if !env.Assign(left.Value, stored) {
 			return newErrorAtNode(stmt, "undefined variable: %s", left.Value)
 		}
 		return val
@@ -694,9 +763,40 @@ func evalSelectorAssign(
 		return newErrorAtNode(left, "undefined field: %s", left.Field)
 	}
 
+	// フィールドが固定幅型なら実行時幅チェックする
+	if parentType := typeNameOfExpr(left.Object, env); parentType != "" {
+		if def, ok := env.GetTypeDef(parentType); ok {
+			if fieldType, ok := def.FieldTypes[left.Field]; ok {
+				if errObj := checkWidth(left, fieldType, val); errObj != nil {
+					return errObj
+				}
+			}
+		}
+	}
+
 	s.Fields[left.Field] = bindValue(val)
 
 	return val
+}
+
+// typeNameOfExpr は式が参照する変数の宣言時型名を返す (判定不能なら "")
+// セレクタの親をたどって struct フィールドの型名も解決する
+func typeNameOfExpr(expr ast.Expression, env *object.Environment) string {
+	switch e := expr.(type) {
+	case *ast.Identifier:
+		if t, ok := env.VarType(e.Value); ok {
+			return t
+		}
+	case *ast.SelectorExpression:
+		parent := typeNameOfExpr(e.Object, env)
+		if parent == "" {
+			return ""
+		}
+		if def, ok := env.GetTypeDef(parent); ok {
+			return def.FieldTypes[e.Field]
+		}
+	}
+	return ""
 }
 
 func evalIndexAssign(

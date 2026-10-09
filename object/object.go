@@ -13,6 +13,9 @@ type Environment struct {
 
 	// struct 型定義の登録 (型名 → 定義)
 	typeDefs map[string]*StructDef
+
+	// 宣言時に型名が明示された変数の記録 (実行時幅チェックに使用)
+	varTypes map[string]string
 }
 
 func NewEnvironment() *Environment {
@@ -69,6 +72,27 @@ func (e *Environment) GetTypeDef(name string) (*StructDef, bool) {
 		return e.outer.GetTypeDef(name)
 	}
 	return nil, false
+}
+
+// DeclareTyped は型名を明示して現在スコープに宣言する (x : INT = 10 など)
+func (e *Environment) DeclareTyped(name string, val Object, typeName string) {
+	e.store[name] = val
+	if e.varTypes == nil {
+		e.varTypes = make(map[string]string)
+	}
+	e.varTypes[name] = typeName
+}
+
+// VarType は変数の宣言時型名を外側スコープも含めて検索する。
+// 型推論による宣言 (:=) はここに登録されない
+func (e *Environment) VarType(name string) (string, bool) {
+	if t, ok := e.varTypes[name]; ok {
+		return t, true
+	}
+	if e.outer != nil {
+		return e.outer.VarType(name)
+	}
+	return "", false
 }
 
 type ObjectType string

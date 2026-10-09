@@ -131,6 +131,23 @@ func (be *BinaryExpression) GetToken() lexer.Token {
 	return be.Left.GetToken()
 }
 
+// PrefixExpression は -x / !flag のような単項演算
+type PrefixExpression struct {
+	Token    lexer.Token
+	Operator string
+	Right    Expression
+}
+
+func (pe *PrefixExpression) expressionNode() {}
+
+func (pe *PrefixExpression) String() string {
+	return fmt.Sprintf("%s%s", pe.Operator, pe.Right.String())
+}
+
+func (pe *PrefixExpression) GetToken() lexer.Token {
+	return pe.Token
+}
+
 // CastExpression は REAL(a) のような明示的キャスト (SPEC 6.3)
 type CastExpression struct {
 	Token lexer.Token

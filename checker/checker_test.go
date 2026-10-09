@@ -329,3 +329,56 @@ d.motor = m`
 		t.Fatalf("unexpected errors: %v", errs)
 	}
 }
+
+func TestCheckLiteralOutOfRange(t *testing.T) {
+	testCheckErrors(
+		`x : SINT = 128`,
+		[]string{"value 128 out of range for SINT (-128..127)"},
+		t,
+	)
+}
+
+func TestCheckLiteralOutOfRangeNegative(t *testing.T) {
+	testCheckErrors(
+		`x : INT = -32769`,
+		[]string{"value -32769 out of range for INT (-32768..32767)"},
+		t,
+	)
+}
+
+func TestCheckCastLiteralOutOfRange(t *testing.T) {
+	testCheckErrors(
+		`x := WORD(70000)`,
+		[]string{"value 70000 out of range for WORD (0..65535)"},
+		t,
+	)
+}
+
+func TestCheckLiteralInRange(t *testing.T) {
+	for _, input := range []string{
+		`x : SINT = -128`,
+		`x : ULINT = 9223372036854775807`,
+		`x := WORD(65535)`,
+	} {
+		if errs := Check(parseInput(input)); len(errs) > 0 {
+			t.Fatalf("unexpected errors (%q): %v", input, errs)
+		}
+	}
+}
+
+func TestCheckPrefixExpression(t *testing.T) {
+	testCheckErrors(
+		`x := -true`,
+		[]string{"operand of - must be numeric, got BOOL"},
+		t,
+	)
+	testCheckErrors(
+		`x := !1`,
+		[]string{"operand of ! must be BOOL, got INT"},
+		t,
+	)
+	valid := parseInput("x := -5\ny := !true\nz : SINT = -128")
+	if errs := Check(valid); len(errs) > 0 {
+		t.Fatalf("unexpected errors: %v", errs)
+	}
+}

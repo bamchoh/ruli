@@ -78,6 +78,8 @@ func New(l *lexer.Lexer) *Parser {
 	p.registerPrefix(lexer.TRUE, p.parseBooleanLiteral)
 	p.registerPrefix(lexer.FALSE, p.parseBooleanLiteral)
 	p.registerPrefix(lexer.LPAREN, p.parseParenthesized)
+	p.registerPrefix(lexer.MINUS, p.parsePrefixExpression)
+	p.registerPrefix(lexer.BANG, p.parsePrefixExpression)
 
 	p.registerInfix(lexer.PLUS, p.parseInfixExpression)
 	p.registerInfix(lexer.MINUS, p.parseInfixExpression)
@@ -401,6 +403,20 @@ func (p *Parser) parseParenthesized() ast.Expression {
 	}
 
 	return exp
+}
+
+// parsePrefixExpression は -x / !flag をパースする。
+// オペランドは PRODUCT 相当の優先度で読む ( -a * b は (-a) * b )
+func (p *Parser) parsePrefixExpression() ast.Expression {
+	stmt := &ast.PrefixExpression{
+		Token:    p.curToken,
+		Operator: p.curToken.Literal,
+	}
+
+	p.nextToken()
+	stmt.Right = p.parseExpression(PRODUCT)
+
+	return stmt
 }
 
 func (p *Parser) parseInfixExpression(left ast.Expression) ast.Expression {
