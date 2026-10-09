@@ -170,6 +170,22 @@ type Array struct {
 	Elements []Object
 }
 
+// Copy は SPEC 4.4 (値渡し) に従い配列を再帰的に複製する。
+// Integer など不変の要素はそのまま共有する
+func (a *Array) Copy() *Array {
+	elements := make([]Object, len(a.Elements))
+
+	for i, el := range a.Elements {
+		if nested, ok := el.(*Array); ok {
+			elements[i] = nested.Copy()
+		} else {
+			elements[i] = el
+		}
+	}
+
+	return &Array{Elements: elements}
+}
+
 func (a *Array) Type() ObjectType {
 	return ARRAY_OBJ
 }

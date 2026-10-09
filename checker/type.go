@@ -17,6 +17,11 @@ func (t *Type) Equal(other *Type) bool {
 	if t == nil || other == nil {
 		return false
 	}
+	// ANY / UNKNOWN は検査不能 (未指定引数、要素型不明など) なのですべてと一致扱い
+	if t.Name == ANY_TYPE.Name || other.Name == ANY_TYPE.Name ||
+		t.Name == UNKNOWN_TYPE.Name || other.Name == UNKNOWN_TYPE.Name {
+		return true
+	}
 	if t.Name != other.Name {
 		return false
 	}

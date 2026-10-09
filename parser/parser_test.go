@@ -659,10 +659,27 @@ func TestParseErrorInvalidIntegerLiteral(t *testing.T) {
 	)
 }
 
+func TestBareIndexExpressionStatement(t *testing.T) {
+	// a[0] のようなインデックス式単独の文は式文として有効な構文
+	l := lexer.New(`a[0]`)
+	p := New(l)
+	program := p.ParseProgram()
+	if len(p.Errors()) != 0 {
+		t.Fatalf("unexpected parse errors: %v", p.Errors())
+	}
+	if len(program.Statements) != 1 {
+		t.Fatalf("program.Statements does not contain 1 statement. got=%d", len(program.Statements))
+	}
+	if _, ok := program.Statements[0].(*ast.ExpressionStatement); !ok {
+		t.Fatalf("stmt not *ast.ExpressionStatement. got=%T", program.Statements[0])
+	}
+}
+
 func TestParseErrorIndexedAssignWithoutValue(t *testing.T) {
+	// 変数宣言とインデックスの欠落で式の解析に失敗する(旧実装は文ごと黙って破棄)
 	testParseErrors(
-		`a[0]`,
-		[]string{"expected '=', got 'EOF'"},
+		`x := nums[1`,
+		[]string{"expected ']', got 'EOF'"},
 		t,
 	)
 }

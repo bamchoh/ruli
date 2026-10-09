@@ -220,7 +220,7 @@ func (c *Checker) checkAssign(stmt *ast.AssignStatement, env *Env) {
 			return
 		}
 
-		if array.Name != ARRAY_TYPE.Name {
+		if array.Name != ARRAY_TYPE.Name && array.Name != ANY_TYPE.Name {
 			c.errAt(left.GetToken(), "not an array")
 			return
 		}
@@ -245,6 +245,9 @@ func (c *Checker) checkAssign(stmt *ast.AssignStatement, env *Env) {
 				vt.Name,
 			)
 		}
+
+	default:
+		c.errAt(stmt.GetToken(), "invalid assignment target")
 	}
 }
 
@@ -396,7 +399,7 @@ func (c *Checker) checkExpr(expr ast.Expression, env *Env) *Type {
 			return nil
 		}
 
-		if array.Name != ARRAY_TYPE.Name {
+		if array.Name != ARRAY_TYPE.Name && array.Name != ANY_TYPE.Name {
 			c.errAt(e.GetToken(), "not an array")
 			return nil
 		}
@@ -554,7 +557,8 @@ func (c *Checker) checkBuiltinCall(name string, e *ast.CallExpression, env *Env)
 			return nil
 		}
 
-		if t.Name != ARRAY_TYPE.Name && t.Name != STRING_TYPE.Name {
+		if t.Name != ARRAY_TYPE.Name && t.Name != STRING_TYPE.Name &&
+			t.Name != ANY_TYPE.Name {
 			c.errAt(
 				e.GetToken(),
 				"argument to `len` not supported, got %s",

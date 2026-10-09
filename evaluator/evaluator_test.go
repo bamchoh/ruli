@@ -212,3 +212,69 @@ twice(21)`,
 		t,
 	)
 }
+
+func TestArrayCopyOnVarDecl(t *testing.T) {
+	// SPEC 4.4: 束縛は配列を複製する
+	testEvalInteger(
+		`a := [1, 2, 3]
+b := a
+b[0] = 99
+a[0]`,
+		1,
+		t,
+	)
+}
+
+func TestArrayCopyOnAssign(t *testing.T) {
+	testEvalInteger(
+		`a := [1]
+b := [5]
+b = a
+b[0] = 99
+a[0]`,
+		1,
+		t,
+	)
+}
+
+func TestArrayCopyOnFunctionArg(t *testing.T) {
+	// SPEC 5.2: 引数は完全値渡し
+	testEvalInteger(
+		`func f(x) INT {
+	x[0] = 99
+	return x[0]
+}
+a := [1, 2, 3]
+f(a)
+a[0]`,
+		1,
+		t,
+	)
+}
+
+func TestNestedArrayCopy(t *testing.T) {
+	testEvalInteger(
+		`m := [[1, 2], [3, 4]]
+n := m
+n[1][0] = 99
+m[1][0]`,
+		3,
+		t,
+	)
+}
+
+func TestArrayElementMutationIsShared(t *testing.T) {
+	// 同じ配列オブジェクトを参照する要素/外側参照からの変更は共有が許可される
+	// (SPEC 12.1: 外側スコープの書き込み)
+	testEvalInteger(
+		`a := [1, 2, 3]
+func inc() INT {
+	a[0] = 50
+	return a[0]
+}
+inc()
+a[0]`,
+		50,
+		t,
+	)
+}

@@ -180,21 +180,10 @@ func (p *Parser) parseStatement() ast.Statement {
 
 	case lexer.IDENT:
 
-		if p.peekToken.Type == lexer.LBRACKET {
-			// 型付き nil を interface に変換しないよう、ここで nil 判定する
-			if stmt := p.parseIndexedAssignStatement(); stmt != nil {
-				return stmt
-			}
-			return nil
-		}
-
 		switch p.peekToken.Type {
 
 		case lexer.DECLARE, lexer.COLON:
 			return p.parseVarDeclStatement()
-
-		case lexer.ASSIGN:
-			return p.parseAssignStatement()
 
 		case lexer.INC, lexer.DEC:
 			return p.parseIncDecStatement()
@@ -203,13 +192,25 @@ func (p *Parser) parseStatement() ast.Statement {
 
 	}
 
-	return p.parseExpressionStatement()
+	return p.parseAssignOrExpressionStatement()
 }
 
-func (p *Parser) parseExpressionStatement() *ast.ExpressionStatement {
-	stmt := &ast.ExpressionStatement{}
-	stmt.Expression = p.parseExpression(LOWEST)
-	return stmt
+// parseAssignOrExpressionStatement は式を 1 つパースする。
+// 直後に = が続く場合は代入文として構築する (x = 10 / a[0] = 10)
+func (p *Parser) parseAssignOrExpressionStatement() ast.Statement {
+	expr := p.parseExpression(LOWEST)
+
+	if p.peekToken.Type != lexer.ASSIGN {
+		return &ast.ExpressionStatement{Expression: expr}
+	}
+
+	p.nextToken() // =
+	p.nextToken() // value first token
+
+	return &ast.AssignStatement{
+		Left:  expr,
+		Value: p.parseExpression(LOWEST),
+	}
 }
 
 func (p *Parser) parseVarDeclStatement() *ast.VarDeclStatement {
@@ -251,40 +252,6 @@ func (p *Parser) parseVarDeclStatement() *ast.VarDeclStatement {
 
 		return stmt
 	}
-
-	return stmt
-}
-
-func (p *Parser) parseAssignStatement() *ast.AssignStatement {
-	stmt := &ast.AssignStatement{
-		Left: &ast.Identifier{
-			Token: p.curToken,
-			Value: p.curToken.Literal,
-		},
-	}
-	p.nextToken() // skip =
-	p.nextToken() // first expr token
-	stmt.Value = p.parseExpression(LOWEST)
-	return stmt
-}
-
-func (p *Parser) parseIndexedAssignStatement() *ast.AssignStatement {
-
-	left := p.parseExpression(LOWEST)
-
-	if p.peekToken.Type != lexer.ASSIGN {
-		p.errorAtPeek("expected '=', got '%s'", tokenLabel(p.peekToken))
-		return nil
-	}
-
-	stmt := &ast.AssignStatement{
-		Left: left,
-	}
-
-	p.nextToken() // =
-	p.nextToken() // first expr
-
-	stmt.Value = p.parseExpression(LOWEST)
 
 	return stmt
 }

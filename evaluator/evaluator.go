@@ -62,7 +62,7 @@ func Eval(node ast.Node, env *object.Environment) object.Object {
 		if isError(val) {
 			return val
 		}
-		env.Set(node.Name.Value, val)
+		env.Set(node.Name.Value, bindValue(val))
 		return val
 
 	case *ast.AssignStatement:
@@ -471,9 +471,8 @@ func applyFunction(fn *object.Function, args []object.Object) object.Object {
 	extendedEnv := object.NewEnclosedEnvironment(fn.Env)
 
 	for i, param := range fn.Parameters {
-		if i < len(args) {
-			extendedEnv.Set(param.Name, args[i])
-		}
+		// SPEC 5.2: 引数は完全値渡し
+		extendedEnv.Set(param.Name, bindValue(args[i]))
 	}
 
 	result := Eval(fn.Body, extendedEnv)
@@ -524,7 +523,7 @@ func evalAssignStatement(
 
 	case *ast.Identifier:
 		// = は宣言ではなく更新。未定義変数への代入は SPEC 4.1.1 でエラー
-		if !env.Assign(left.Value, val) {
+		if !env.Assign(left.Value, bindValue(val)) {
 			return newErrorAtNode(stmt, "undefined variable: %s", left.Value)
 		}
 		return val
@@ -533,7 +532,7 @@ func evalAssignStatement(
 		return evalIndexAssign(left, val, env)
 	}
 
-	return &object.Null{}
+	return newErrorAtNode(stmt, "invalid assignment target")
 }
 
 func evalIndexAssign(
@@ -568,7 +567,7 @@ func evalIndexAssign(
 		return newErrorAtNode(left, "index out of range: %d", idx)
 	}
 
-	array.Elements[idx] = val
+	array.Elements[idx] = bindValue(val)
 
 	return val
 }
