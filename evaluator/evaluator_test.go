@@ -278,3 +278,26 @@ a[0]`,
 		t,
 	)
 }
+
+func testEvalReal(input string, expected float64, t *testing.T) {
+	evaluated := testEval(input)
+	if isError(evaluated) {
+		t.Fatalf("unexpected error: %s", evaluated.Inspect())
+	}
+	result, ok := evaluated.(*object.Real)
+	if !ok {
+		t.Fatalf("object is not Real. got=%T (%+v)", evaluated, evaluated)
+	}
+	if result.Value != expected {
+		t.Fatalf("object has wrong value. got=%f, want=%f", result.Value, expected)
+	}
+}
+
+func TestCastNumberToReal(t *testing.T) {
+	testEvalReal(`REAL(1) + REAL(2)`, 3.0, t)
+}
+
+func TestCastTruncatesToInteger(t *testing.T) {
+	// 実数 → 整数は 0 方向へ切り捨て
+	testEvalInteger(`DINT(REAL(7) / REAL(2))`, 3, t)
+}

@@ -131,6 +131,23 @@ func (be *BinaryExpression) GetToken() lexer.Token {
 	return be.Left.GetToken()
 }
 
+// CastExpression は REAL(a) のような明示的キャスト (SPEC 6.3)
+type CastExpression struct {
+	Token lexer.Token
+	Type  string // 目標型名 (REAL, DINT など)
+	Value Expression
+}
+
+func (ce *CastExpression) expressionNode() {}
+
+func (ce *CastExpression) String() string {
+	return fmt.Sprintf("%s(%s)", ce.Type, ce.Value.String())
+}
+
+func (ce *CastExpression) GetToken() lexer.Token {
+	return ce.Token
+}
+
 type BasicType struct {
 	Token lexer.Token
 	Name  string

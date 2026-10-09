@@ -314,10 +314,44 @@ func (p *Parser) parseIntegerLiteral() ast.Expression {
 	}
 }
 
+// castableTypes はキャスト可能な型名 (SPEC 6.3: REAL(a) のような明示キャスト)
+var castableTypes = map[string]bool{
+	"INT": true, "SINT": true, "USINT": true, "BYTE": true,
+	"UINT": true, "WORD": true, "DINT": true, "UDINT": true,
+	"DWORD": true, "LINT": true, "ULINT": true, "LWORD": true,
+	"REAL": true, "LREAL": true, "BOOL": true,
+}
+
 func (p *Parser) parseIdentifier() ast.Expression {
+	if _, ok := castableTypes[p.curToken.Literal]; ok &&
+		p.peekToken.Type == lexer.LPAREN {
+		// 型名 + ( のキャスト: REAL(x)
+		return p.parseCast()
+	}
+
 	return &ast.Identifier{
 		Token: p.curToken,
 		Value: p.curToken.Literal,
+	}
+}
+
+func (p *Parser) parseCast() ast.Expression {
+	token := p.curToken
+	target := p.curToken.Literal
+
+	p.nextToken() // (
+	p.nextToken() // value first token
+
+	value := p.parseExpression(LOWEST)
+
+	if p.expectPeek(lexer.RPAREN) {
+		p.nextToken() // consume )
+	}
+
+	return &ast.CastExpression{
+		Token: token,
+		Type:  target,
+		Value: value,
 	}
 }
 

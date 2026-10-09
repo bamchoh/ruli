@@ -761,3 +761,31 @@ func TestParseErrorHasPosition(t *testing.T) {
 		t.Fatalf("wrong line. got=%d, want=2", errs[0].Line)
 	}
 }
+
+func TestCastExpression(t *testing.T) {
+	l := lexer.New(`REAL(a)`)
+	p := New(l)
+	program := p.ParseProgram()
+	if len(p.Errors()) != 0 {
+		t.Fatalf("unexpected parse errors: %v", p.Errors())
+	}
+	if len(program.Statements) != 1 {
+		t.Fatalf("program.Statements does not contain 1 statement. got=%d", len(program.Statements))
+	}
+
+	exprStmt, ok := program.Statements[0].(*ast.ExpressionStatement)
+	if !ok {
+		t.Fatalf("stmt not *ast.ExpressionStatement. got=%T", program.Statements[0])
+	}
+
+	cast, ok := exprStmt.Expression.(*ast.CastExpression)
+	if !ok {
+		t.Fatalf("expression not *ast.CastExpression. got=%T", exprStmt.Expression)
+	}
+	if cast.Type != "REAL" {
+		t.Fatalf("cast.Type not REAL. got=%s", cast.Type)
+	}
+	if !testIdentifier(t, cast.Value, "a") {
+		t.Fatalf("cast.Value not as expected")
+	}
+}

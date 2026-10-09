@@ -197,3 +197,43 @@ func TestCheckErrorHasPosition(t *testing.T) {
 		t.Fatalf("wrong formatted message. got=%s", errs[0].Error())
 	}
 }
+
+func TestCheckCastValid(t *testing.T) {
+	for _, input := range []string{
+		`x := REAL(1)`,
+		`x := DINT(REAL(1) / REAL(2))`,
+		`x : DINT = 5`,
+		`x : WORD = 5`,
+		`x := REAL(1) + REAL(2)`,
+		`f : BOOL = BOOL(true)`,
+	} {
+		if errs := Check(parseInput(input)); len(errs) > 0 {
+			t.Fatalf("unexpected errors (%q): %v", input, errs)
+		}
+	}
+}
+
+func TestCheckCastToRealFromBool(t *testing.T) {
+	testCheckErrors(
+		`x := REAL(true)`,
+		[]string{"invalid cast: BOOL to REAL"},
+		t,
+	)
+}
+
+func TestCheckCastToBoolFromInt(t *testing.T) {
+	testCheckErrors(
+		`x := BOOL(1)`,
+		[]string{"invalid cast: INT to BOOL"},
+		t,
+	)
+}
+
+func TestCheckCastRealIntMix(t *testing.T) {
+	// SPEC 6.3: INT + REAL もキャスト後もエラー
+	testCheckErrors(
+		`x := REAL(1) + 5`,
+		[]string{"type mismatch: REAL + INT"},
+		t,
+	)
+}

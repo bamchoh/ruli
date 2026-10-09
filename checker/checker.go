@@ -421,6 +421,9 @@ func (c *Checker) checkExpr(expr ast.Expression, env *Env) *Type {
 
 	case *ast.CallExpression:
 		return c.checkCall(e, env)
+
+	case *ast.CastExpression:
+		return c.checkCast(e, env)
 	}
 
 	return nil
@@ -532,6 +535,48 @@ func (c *Checker) checkCall(e *ast.CallExpression, env *Env) *Type {
 		return VOID_TYPE
 	}
 	return fnType.Return
+}
+
+// checkCast は REAL(a) のような明示的キャストを検査する (SPEC 6.3)
+func (c *Checker) checkCast(e *ast.CastExpression, env *Env) *Type {
+	target, ok := resolveBasic(e.Type)
+	if !ok {
+		c.errAt(e.GetToken(), "unknown type: %s", e.Type)
+		return nil
+	}
+
+	vt := c.checkExpr(e.Value, env)
+	if vt == nil {
+		return nil
+	}
+
+	switch target.Name {
+	case BOOL_TYPE.Name:
+		if vt.Name != BOOL_TYPE.Name {
+			c.errAt(
+				e.Value.GetToken(),
+				"invalid cast: %s to BOOL",
+				vt.Name,
+			)
+			return nil
+		}
+	case STRING_TYPE.Name:
+		c.errAt(e.GetToken(), "casting to STRING is not supported")
+		return nil
+	default:
+		// 数値型へのキャスト (整数族 / 実数族)
+		if !isNumeric(vt) {
+			c.errAt(
+				e.Value.GetToken(),
+				"invalid cast: %s to %s",
+				vt.Name,
+				target.Name,
+			)
+			return nil
+		}
+	}
+
+	return target
 }
 
 func (c *Checker) checkBuiltinCall(name string, e *ast.CallExpression, env *Env) *Type {

@@ -110,6 +110,13 @@ func Eval(node ast.Node, env *object.Environment) object.Object {
 	case *ast.CallExpression:
 		return evalCallExpression(node, env)
 
+	case *ast.CastExpression:
+		val := Eval(node.Value, env)
+		if isError(val) {
+			return val
+		}
+		return evalCast(node, val)
+
 	case *ast.ExpressionStatement:
 		return Eval(node.Expression, env)
 
@@ -464,6 +471,40 @@ func evalCallExpression(node *ast.CallExpression, env *object.Environment) objec
 	}
 
 	return newErrorAtNode(node, "not a function: %s", function.Type())
+}
+
+// evalCast は REAL(a) のような明示的キャストを実行する (SPEC 6.3)。
+// 静的な型チェックは checker が担当し、ここでは値変換のみを行う
+func evalCast(node *ast.CastExpression, val object.Object) object.Object {
+
+	target := node.Type
+
+	switch target {
+	case "REAL", "LREAL":
+		switch v := val.(type) {
+		case *object.Real:
+			return v
+		case *object.Integer:
+			return &object.Real{Value: float64(v.Value)}
+		}
+
+	case "BOOL":
+		if b, ok := val.(*object.Boolean); ok {
+			return b
+		}
+
+	default:
+		// 整数族へのキャスト (SINT〜LWORD)
+		switch v := val.(type) {
+		case *object.Integer:
+			return v
+		case *object.Real:
+			// 実数 → 整数は 0 方向へ切り捨て
+			return &object.Integer{Value: int(v.Value)}
+		}
+	}
+
+	return newErrorAtNode(node, "invalid cast: %s to %s", val.Type(), target)
 }
 
 func applyFunction(fn *object.Function, args []object.Object) object.Object {

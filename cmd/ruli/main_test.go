@@ -62,3 +62,11 @@ func TestRunMissingFile(t *testing.T) {
 		t.Fatal("expected error")
 	}
 }
+
+func TestRunFixedWidthTypesAndCasts(t *testing.T) {
+	// 固定幅型宣言 + 実数族の暗黙変換 (checker では同族は許可)
+	script := "w : WORD = 5\nd : DINT = w\nr := REAL(d)"
+	if err := run(writeScript(t, script)); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
