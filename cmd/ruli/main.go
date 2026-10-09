@@ -20,6 +20,12 @@ if flag {
 	l := lexer.New(input)
 	p := parser.New(l)
 	program := p.ParseProgram()
+	if errs := p.Errors(); len(errs) > 0 {
+		for _, e := range errs {
+			fmt.Fprintln(os.Stderr, e.Error())
+		}
+		os.Exit(1)
+	}
 
 	env := object.NewEnvironment()
 	result := evaluator.Eval(program, env)

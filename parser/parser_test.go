@@ -623,3 +623,124 @@ func TestArrayIndexExpression(t *testing.T) {
 		}
 	}
 }
+
+func testParseErrors(input string, expectedErrs []string, t *testing.T) {
+	l := lexer.New(input)
+	p := New(l)
+	p.ParseProgram()
+
+	errs := p.Errors()
+	if len(errs) != len(expectedErrs) {
+		t.Fatalf("wrong number of errors. got=%d (%v), want=%d",
+			len(errs), errs, len(expectedErrs))
+	}
+
+	for i, want := range expectedErrs {
+		if errs[i].Message != want {
+			t.Fatalf("error %d message not as expected. got=%s, want=%s",
+				i, errs[i].Message, want)
+		}
+	}
+}
+
+func TestParseErrorNoPrefix(t *testing.T) {
+	testParseErrors(
+		`if flag { } else { x } =`,
+		[]string{"unexpected token '='"},
+		t,
+	)
+}
+
+func TestParseErrorInvalidIntegerLiteral(t *testing.T) {
+	testParseErrors(
+		`999999999999999999999999999`,
+		[]string{"invalid integer literal '999999999999999999999999999'"},
+		t,
+	)
+}
+
+func TestParseErrorIndexedAssignWithoutValue(t *testing.T) {
+	testParseErrors(
+		`a[0]`,
+		[]string{"expected '=', got 'EOF'"},
+		t,
+	)
+}
+
+func TestParseErrorIfWithoutBrace(t *testing.T) {
+	testParseErrors(
+		`if flag
+x := 1`,
+		[]string{"expected '{', got 'x'"},
+		t,
+	)
+}
+
+func TestParseErrorUnclosedBlock(t *testing.T) {
+	testParseErrors(
+		`if flag {
+	print("flag is true")
+`,
+		[]string{"expected '}', got EOF"},
+		t,
+	)
+}
+
+func TestParseErrorMissingClosingParen(t *testing.T) {
+	testParseErrors(
+		`print("a", "b"`,
+		[]string{"expected ')', got 'EOF'"},
+		t,
+	)
+}
+
+func TestParseErrorUnclosedBracket(t *testing.T) {
+	testParseErrors(
+		`a := nums[1`,
+		[]string{
+			"expected ']', got 'EOF'",
+		},
+		t,
+	)
+}
+
+func TestParseErrorUnknownType(t *testing.T) {
+	testParseErrors(
+		`x : = 10`,
+		[]string{"unknown type '='"},
+		t,
+	)
+}
+
+func TestParseErrorMissingSemicolonInFor(t *testing.T) {
+	// エラー復帰機能を持たないため、最初のエラー以降はカスケードする
+	testParseErrors(
+		`for i := 0 i < 10; i++ { }`,
+		[]string{
+			"expected ';', got 'i'",
+			"unexpected token '{'",
+			"unexpected token '}'",
+		},
+		t,
+	)
+}
+
+func TestParseErrorHasPosition(t *testing.T) {
+	l := lexer.New("x := 1\n}")
+	p := New(l)
+	p.ParseProgram()
+
+	errs := p.Errors()
+	if len(errs) != 1 {
+		t.Fatalf("wrong number of errors. got=%d (%v)", len(errs), errs)
+	}
+
+	if errs[0].Message != "unexpected token '}'" {
+		t.Fatalf("wrong message. got=%s", errs[0].Message)
+	}
+
+	// 2 行目の '}' を指す
+	if errs[0].Line != 2 {
+		t.Fatalf("wrong line. got=%d, want=2", errs[0].Line)
+	}
+}

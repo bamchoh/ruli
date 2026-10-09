@@ -1,6 +1,7 @@
 package parser
 
 import (
+	"fmt"
 	"ruli/ast"
 	"ruli/lexer"
 	"strconv"
@@ -34,6 +35,18 @@ type (
 	infixParseFn  func(ast.Expression) ast.Expression
 )
 
+// ParseError はパースエラーを行列位置とともに保持する
+type ParseError struct {
+	Message string
+
+	Line   int
+	Column int
+}
+
+func (e *ParseError) Error() string {
+	return fmt.Sprintf("%d:%d: %s", e.Line, e.Column, e.Message)
+}
+
 type Parser struct {
 	l *lexer.Lexer
 
@@ -42,6 +55,13 @@ type Parser struct {
 
 	prefixParseFns map[lexer.TokenType]prefixParseFn
 	infixParseFns  map[lexer.TokenType]infixParseFn
+
+	errors []ParseError
+}
+
+// Errors はパース中に記録されたエラーを返す
+func (p *Parser) Errors() []ParseError {
+	return p.errors
 }
 
 func New(l *lexer.Lexer) *Parser {
@@ -78,6 +98,39 @@ func New(l *lexer.Lexer) *Parser {
 func (p *Parser) nextToken() {
 	p.curToken = p.peekToken
 	p.peekToken = p.l.NextToken()
+}
+
+// errorAt は指定トークンの行列位置を添えてパースエラーを記録する
+func (p *Parser) errorAt(token lexer.Token, format string, args ...interface{}) {
+	p.errors = append(p.errors, ParseError{
+		Message: fmt.Sprintf(format, args...),
+		Line:    token.Line,
+		Column:  token.Column,
+	})
+}
+
+func (p *Parser) errorAtPeek(format string, args ...interface{}) {
+	p.errorAt(p.peekToken, format, args...)
+}
+
+// expectPeek は peekToken が指定トークンなら true を返す。
+// 異なる場合はエラーを記録し false を返す (トークンは消費しない)
+func (p *Parser) expectPeek(tokType lexer.TokenType) bool {
+	if p.peekToken.Type == tokType {
+		return true
+	}
+
+	p.errorAtPeek("expected '%s', got '%s'", tokType, tokenLabel(p.peekToken))
+	return false
+}
+
+// tokenLabel はエラーメッセージ表示用にトークンを整形する
+// (EOF は literal が空なので TokenType で代替する)
+func tokenLabel(tok lexer.Token) string {
+	if tok.Literal != "" {
+		return tok.Literal
+	}
+	return string(tok.Type)
 }
 
 func (p *Parser) ParseProgram() *ast.Program {
@@ -180,6 +233,10 @@ func (p *Parser) parseVarDeclStatement() *ast.VarDeclStatement {
 
 		stmt.Type = p.parseType()
 
+		if stmt.Type == nil {
+			p.errorAt(p.curToken, "unknown type '%s'", tokenLabel(p.curToken))
+		}
+
 		if p.peekToken.Type == lexer.ASSIGN {
 			p.nextToken() // =
 			p.nextToken() // expr first token
@@ -211,6 +268,7 @@ func (p *Parser) parseIndexedAssignStatement() *ast.AssignStatement {
 	left := p.parseExpression(LOWEST)
 
 	if p.peekToken.Type != lexer.ASSIGN {
+		p.errorAtPeek("expected '=', got '%s'", tokenLabel(p.peekToken))
 		return nil
 	}
 
@@ -251,6 +309,7 @@ func (p *Parser) parseExpression(precedence int) ast.Expression {
 
 	prefix := p.prefixParseFns[p.curToken.Type]
 	if prefix == nil {
+		p.errorAt(p.curToken, "unexpected token '%s'", tokenLabel(p.curToken))
 		return nil
 	}
 
@@ -274,6 +333,7 @@ func (p *Parser) parseExpression(precedence int) ast.Expression {
 func (p *Parser) parseIntegerLiteral() ast.Expression {
 	value, err := strconv.ParseInt(p.curToken.Literal, 0, 64)
 	if err != nil {
+		p.errorAt(p.curToken, "invalid integer literal '%s'", p.curToken.Literal)
 		return nil
 	}
 	return &ast.IntegerLiteral{
@@ -336,7 +396,7 @@ func (p *Parser) parseIfStatement() *ast.IfStatement {
 
 	stmt.Condition = p.parseExpression(LOWEST)
 
-	if p.peekToken.Type != lexer.LBRACE {
+	if !p.expectPeek(lexer.LBRACE) {
 		return stmt
 	}
 
@@ -360,12 +420,12 @@ func (p *Parser) parseIfStatement() *ast.IfStatement {
 			return stmt
 		}
 
-		if p.peekToken.Type != lexer.LBRACE {
+		if !p.expectPeek(lexer.LBRACE) {
 			return stmt
 		}
 
 		p.nextToken() // {
-		p.nextToken() // {
+		p.nextToken() // first stmt in block
 		stmt.Alternative = p.parseBlockStatement()
 	}
 
@@ -386,6 +446,10 @@ func (p *Parser) parseBlockStatement() *ast.BlockStatement {
 		}
 
 		p.nextToken()
+	}
+
+	if p.curToken.Type == lexer.EOF {
+		p.errorAt(p.curToken, "expected '}', got EOF")
 	}
 
 	return block
@@ -413,7 +477,7 @@ func (p *Parser) parseForStatement() *ast.ForStatement {
 	p.nextToken() // init first token
 	stmt.Init = p.parseStatement()
 
-	if p.peekToken.Type != lexer.SEMICOLON {
+	if !p.expectPeek(lexer.SEMICOLON) {
 		return stmt
 	}
 
@@ -421,7 +485,7 @@ func (p *Parser) parseForStatement() *ast.ForStatement {
 	p.nextToken() // condition first token
 	stmt.Condition = p.parseExpression(LOWEST)
 
-	if p.peekToken.Type != lexer.SEMICOLON {
+	if !p.expectPeek(lexer.SEMICOLON) {
 		return stmt
 	}
 
@@ -429,7 +493,7 @@ func (p *Parser) parseForStatement() *ast.ForStatement {
 	p.nextToken() // post first token
 	stmt.Post = p.parseStatement()
 
-	if p.peekToken.Type != lexer.LBRACE {
+	if !p.expectPeek(lexer.LBRACE) {
 		return stmt
 	}
 
@@ -470,8 +534,8 @@ func (p *Parser) parseExpressionList(end lexer.TokenType) []ast.Expression {
 		list = append(list, p.parseExpression(LOWEST))
 	}
 
-	if p.peekToken.Type == end {
-		p.nextToken()
+	if p.expectPeek(end) {
+		p.nextToken() // consume end token
 	}
 
 	return list
@@ -497,7 +561,7 @@ func (p *Parser) parseFunctionStatement() *ast.FunctionStatement {
 	p.nextToken() // function name
 	stmt.Name = p.curToken.Literal
 
-	if p.peekToken.Type != lexer.LPAREN {
+	if !p.expectPeek(lexer.LPAREN) {
 		return stmt
 	}
 
@@ -510,7 +574,7 @@ func (p *Parser) parseFunctionStatement() *ast.FunctionStatement {
 		stmt.ReturnType = p.curToken.Literal
 	}
 
-	if p.peekToken.Type != lexer.LBRACE {
+	if !p.expectPeek(lexer.LBRACE) {
 		return stmt
 	}
 
@@ -593,9 +657,11 @@ func (p *Parser) parseIndexExpression(left ast.Expression) ast.Expression {
 
 	exp.Index = p.parseExpression(LOWEST)
 
-	if p.peekToken.Type != lexer.RBRACKET {
-		return nil
+	if !p.expectPeek(lexer.RBRACKET) {
+		return exp
 	}
+
+	p.nextToken() // consume ]
 
 	p.nextToken()
 
