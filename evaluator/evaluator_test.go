@@ -119,8 +119,8 @@ func TestErrorHasPosition(t *testing.T) {
 	if !ok {
 		t.Fatalf("object is not Error. got=%T", evaluated)
 	}
-	// 二項演算のエラー位置は演算子トークン(+ = 1行目2列目)に基づく
-	if errObj.Line != 1 || errObj.Column != 2 {
+	// 二項演算のエラー位置は左オペランドの始端 (1 行 1 列) に基づく
+	if errObj.Line != 1 || errObj.Column != 1 {
 		t.Fatalf(
 			"wrong position. got=(%d, %d), want=(%d, %d)",
 			errObj.Line,

@@ -52,7 +52,7 @@ func TestRunRuntimeError(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error")
 	}
-	if got := err.Error(); got != "ERROR: line 1, column 7: division by zero" {
+	if got := err.Error(); got != "ERROR: line 1, column 6: division by zero" {
 		t.Fatalf("wrong error. got=%q", got)
 	}
 }

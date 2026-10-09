@@ -13,6 +13,10 @@ type Lexer struct {
 
 	line   int
 	column int
+
+	// 現在生成中のトークンの始端 (エラーメッセージ用)
+	tokenLine   int
+	tokenColumn int
 }
 
 func New(input string) *Lexer {
@@ -34,6 +38,10 @@ func (l *Lexer) NextToken() Token {
 		l.skipComment()
 		return l.NextToken()
 	}
+
+	// トークン始端を記録する (読み進めた後の位置ではなく)
+	l.tokenLine = l.line
+	l.tokenColumn = l.column
 
 	switch l.ch {
 
@@ -161,8 +169,8 @@ func (l *Lexer) newToken(t TokenType, lit string) Token {
 	return Token{
 		Type:    t,
 		Literal: lit,
-		Line:    l.line,
-		Column:  l.column,
+		Line:    l.tokenLine,
+		Column:  l.tokenColumn,
 	}
 }
 

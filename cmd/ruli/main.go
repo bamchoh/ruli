@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"ruli/checker"
 	"ruli/evaluator"
 	"ruli/lexer"
 	"ruli/object"
@@ -38,6 +39,14 @@ func run(path string) error {
 			parseErrs = append(parseErrs, &e)
 		}
 		return errors.Join(parseErrs...)
+	}
+
+	if errs := checker.Check(program); len(errs) > 0 {
+		typeErrs := make([]error, 0, len(errs))
+		for i := range errs {
+			typeErrs = append(typeErrs, &errs[i])
+		}
+		return errors.Join(typeErrs...)
 	}
 
 	env := object.NewEnvironment()

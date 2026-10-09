@@ -77,6 +77,7 @@ func New(l *lexer.Lexer) *Parser {
 	p.registerPrefix(lexer.LBRACKET, p.parseArrayLiteral)
 	p.registerPrefix(lexer.TRUE, p.parseBooleanLiteral)
 	p.registerPrefix(lexer.FALSE, p.parseBooleanLiteral)
+	p.registerPrefix(lexer.LPAREN, p.parseParenthesized)
 
 	p.registerInfix(lexer.PLUS, p.parseInfixExpression)
 	p.registerInfix(lexer.MINUS, p.parseInfixExpression)
@@ -180,7 +181,11 @@ func (p *Parser) parseStatement() ast.Statement {
 	case lexer.IDENT:
 
 		if p.peekToken.Type == lexer.LBRACKET {
-			return p.parseIndexedAssignStatement()
+			// 型付き nil を interface に変換しないよう、ここで nil 判定する
+			if stmt := p.parseIndexedAssignStatement(); stmt != nil {
+				return stmt
+			}
+			return nil
 		}
 
 		switch p.peekToken.Type {
@@ -347,6 +352,19 @@ func (p *Parser) parseIdentifier() ast.Expression {
 		Token: p.curToken,
 		Value: p.curToken.Literal,
 	}
+}
+
+// parseParenthesized は ( expr ) をパースする
+func (p *Parser) parseParenthesized() ast.Expression {
+	p.nextToken() // expr first token
+
+	exp := p.parseExpression(LOWEST)
+
+	if p.expectPeek(lexer.RPAREN) {
+		p.nextToken() // consume )
+	}
+
+	return exp
 }
 
 func (p *Parser) parseInfixExpression(left ast.Expression) ast.Expression {
