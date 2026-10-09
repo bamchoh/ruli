@@ -55,6 +55,7 @@ const (
 	INC = "++"
 	DEC = "--"
 	FOR = "FOR"
+	DOT = "."
 
 	BREAK    = "BREAK"
 	CONTINUE = "CONTINUE"
@@ -65,6 +66,9 @@ const (
 	STRING_LIT = "STRING_LIT"
 	TRUE       = "TRUE"
 	FALSE      = "FALSE"
+
+	TYPE   = "TYPE"
+	STRUCT = "STRUCT"
 )
 
 var keywords = map[string]TokenType{
@@ -77,6 +81,8 @@ var keywords = map[string]TokenType{
 	"return":   RETURN,
 	"true":     TRUE,
 	"false":    FALSE,
+	"type":     TYPE,
+	"struct":   STRUCT,
 }
 
 func LookupIdent(ident string) TokenType {

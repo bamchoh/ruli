@@ -58,12 +58,36 @@ func Eval(node ast.Node, env *object.Environment) object.Object {
 		return evalProgram(node, env)
 
 	case *ast.VarDeclStatement:
-		val := Eval(node.Value, env)
-		if isError(val) {
-			return val
+		var val object.Object
+
+		switch {
+		case node.Value != nil:
+			val = Eval(node.Value, env)
+			if isError(val) {
+				return val
+			}
+		case node.Type != nil:
+			// 型だけの宣言はゼロ値で初期化する (m : Motor)
+			val = zeroValueForTypeNode(node.Type, env)
+		default:
+			val = &object.Null{}
 		}
+
 		env.Set(node.Name.Value, bindValue(val))
 		return val
+
+	case *ast.TypeDeclStatement:
+		// 実行時の struct 型定義を登録する (ゼロ値構築に使用)
+		def := &object.StructDef{
+			FieldNames: make([]string, 0, len(node.Fields)),
+			FieldTypes: make(map[string]string, len(node.Fields)),
+		}
+		for _, field := range node.Fields {
+			def.FieldNames = append(def.FieldNames, field.Name)
+			def.FieldTypes[field.Name] = field.Type.String()
+		}
+		env.DefineType(node.Name, def)
+		return &object.Null{}
 
 	case *ast.AssignStatement:
 		val := Eval(node.Value, env)
@@ -116,6 +140,13 @@ func Eval(node ast.Node, env *object.Environment) object.Object {
 			return val
 		}
 		return evalCast(node, val)
+
+	case *ast.SelectorExpression:
+		obj := Eval(node.Object, env)
+		if isError(obj) {
+			return obj
+		}
+		return evalSelectorExpression(node, obj)
 
 	case *ast.ExpressionStatement:
 		return Eval(node.Expression, env)
@@ -507,6 +538,69 @@ func evalCast(node *ast.CastExpression, val object.Object) object.Object {
 	return newErrorAtNode(node, "invalid cast: %s to %s", val.Type(), target)
 }
 
+// evalSelectorExpression は m.speed のようなフィールド読み出し
+func evalSelectorExpression(
+	node *ast.SelectorExpression,
+	obj object.Object,
+) object.Object {
+
+	s, ok := obj.(*object.Struct)
+	if !ok {
+		return newErrorAtNode(node, "no field '%s' on %s", node.Field, obj.Type())
+	}
+
+	v, ok := s.Fields[node.Field]
+	if !ok {
+		return newErrorAtNode(node, "undefined field: %s", node.Field)
+	}
+
+	return v
+}
+
+// zeroValueForTypeNode は m : Motor のような初期値なし宣言のゼロ値を作る
+func zeroValueForTypeNode(node ast.TypeNode, env *object.Environment) object.Object {
+	basic, ok := node.(*ast.BasicType)
+	if !ok {
+		return &object.Null{}
+	}
+	return zeroValue(env, basic.Name)
+}
+
+func zeroValue(env *object.Environment, typeName string) object.Object {
+	if isIntFamilyName(typeName) {
+		return &object.Integer{}
+	}
+
+	switch typeName {
+	case "REAL", "LREAL":
+		return &object.Real{}
+	case "BOOL":
+		return FALSE
+	case "STRING":
+		return &object.String{}
+	}
+
+	if def, ok := env.GetTypeDef(typeName); ok {
+		fields := make(map[string]object.Object, len(def.FieldTypes))
+		for name, ft := range def.FieldTypes {
+			fields[name] = zeroValue(env, ft)
+		}
+		return &object.Struct{Fields: fields}
+	}
+
+	return &object.Null{}
+}
+
+// 数値型 (整数族) 名の判定。SPEC 4.1 の固定幅型
+func isIntFamilyName(name string) bool {
+	switch name {
+	case "INT", "SINT", "USINT", "BYTE", "UINT", "WORD",
+		"DINT", "UDINT", "DWORD", "LINT", "ULINT", "LWORD":
+		return true
+	}
+	return false
+}
+
 func applyFunction(fn *object.Function, args []object.Object) object.Object {
 
 	extendedEnv := object.NewEnclosedEnvironment(fn.Env)
@@ -571,9 +665,38 @@ func evalAssignStatement(
 
 	case *ast.IndexExpression:
 		return evalIndexAssign(left, val, env)
+
+	case *ast.SelectorExpression:
+		return evalSelectorAssign(left, val, env)
 	}
 
 	return newErrorAtNode(stmt, "invalid assignment target")
+}
+
+// evalSelectorAssign は m.speed = 10 のようなフィールドへの代入
+func evalSelectorAssign(
+	left *ast.SelectorExpression,
+	val object.Object,
+	env *object.Environment,
+) object.Object {
+
+	obj := Eval(left.Object, env)
+	if isError(obj) {
+		return obj
+	}
+
+	s, ok := obj.(*object.Struct)
+	if !ok {
+		return newErrorAtNode(left, "no field '%s' on %s", left.Field, obj.Type())
+	}
+
+	if _, ok := s.Fields[left.Field]; !ok {
+		return newErrorAtNode(left, "undefined field: %s", left.Field)
+	}
+
+	s.Fields[left.Field] = bindValue(val)
+
+	return val
 }
 
 func evalIndexAssign(

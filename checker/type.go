@@ -11,6 +11,10 @@ type Type struct {
 
 	// 配列の要素型 (Name == ARRAY のときのみ有効)
 	Elem *Type
+
+	// struct フィールド (Name == STRUCT のときのみ有効)
+	FieldNames []string
+	Fields     map[string]*Type
 }
 
 func (t *Type) Equal(other *Type) bool {
@@ -36,6 +40,20 @@ func (t *Type) Equal(other *Type) bool {
 	switch t.Name {
 	case ARRAY_TYPE.Name:
 		return t.Elem.Equal(other.Elem)
+	case STRUCT_TYPE.Name:
+		// 構造的に同型か (同名の異なる宣言は同一視しないが、同構造は許す)
+		if len(t.FieldNames) != len(other.FieldNames) {
+			return false
+		}
+		for _, fname := range t.FieldNames {
+			oft, ok := other.Fields[fname]
+			if !ok {
+				return false
+			}
+			if !t.Fields[fname].Equal(oft) {
+				return false
+			}
+		}
 	case FUNCTION_TYPE.Name:
 		if (t.Return == nil) != (other.Return == nil) {
 			return false
@@ -67,6 +85,8 @@ var (
 	VOID_TYPE     = &Type{Name: "VOID"}
 	// ANY は型チェックを省略するプレースホルダ (未指定の引数など)
 	ANY_TYPE = &Type{Name: "ANY"}
+	// STRUCT_TYPE は struct 型。シグネチャ (フィールド) は必ず上書きして使う
+	STRUCT_TYPE = &Type{Name: "STRUCT", Fields: map[string]*Type{}}
 )
 
 // IEC61131 固定幅整数型 (SPEC 4.1) — 値モデルは INT と共有 (Go int)

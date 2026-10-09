@@ -789,3 +789,85 @@ func TestCastExpression(t *testing.T) {
 		t.Fatalf("cast.Value not as expected")
 	}
 }
+
+func TestTypeDeclStatement(t *testing.T) {
+	input := `type Motor struct {
+	speed:  INT
+	enable: BOOL
+}`
+
+	l := lexer.New(input)
+	p := New(l)
+	program := p.ParseProgram()
+	if len(p.Errors()) != 0 {
+		t.Fatalf("unexpected parse errors: %v", p.Errors())
+	}
+	if len(program.Statements) != 1 {
+		t.Fatalf("program.Statements does not contain 1 statement. got=%d", len(program.Statements))
+	}
+
+	decl, ok := program.Statements[0].(*ast.TypeDeclStatement)
+	if !ok {
+		t.Fatalf("stmt not *ast.TypeDeclStatement. got=%T", program.Statements[0])
+	}
+	if decl.Name != "Motor" {
+		t.Fatalf("decl.Name not Motor. got=%s", decl.Name)
+	}
+	if len(decl.Fields) != 2 {
+		t.Fatalf("decl.Fields does not contain 2 fields. got=%d", len(decl.Fields))
+	}
+	if decl.Fields[0].Name != "speed" || decl.Fields[1].Name != "enable" {
+		t.Fatalf("field names not as expected. got=%s, %s", decl.Fields[0].Name, decl.Fields[1].Name)
+	}
+}
+
+func TestSelectorExpression(t *testing.T) {
+	l := lexer.New(`m.speed`)
+	p := New(l)
+	program := p.ParseProgram()
+	if len(p.Errors()) != 0 {
+		t.Fatalf("unexpected parse errors: %v", p.Errors())
+	}
+
+	exprStmt, ok := program.Statements[0].(*ast.ExpressionStatement)
+	if !ok {
+		t.Fatalf("stmt not *ast.ExpressionStatement. got=%T", program.Statements[0])
+	}
+	sel, ok := exprStmt.Expression.(*ast.SelectorExpression)
+	if !ok {
+		t.Fatalf("expression not *ast.SelectorExpression. got=%T", exprStmt.Expression)
+	}
+	if sel.Field != "speed" {
+		t.Fatalf("sel.Field not speed. got=%s", sel.Field)
+	}
+	if !testIdentifier(t, sel.Object, "m") {
+		t.Fatalf("sel.Object not as expected")
+	}
+}
+
+func TestNestedSelectorExpression(t *testing.T) {
+	l := lexer.New(`d.motor.speed`)
+	p := New(l)
+	program := p.ParseProgram()
+	if len(p.Errors()) != 0 {
+		t.Fatalf("unexpected parse errors: %v", p.Errors())
+	}
+
+	exprStmt, ok := program.Statements[0].(*ast.ExpressionStatement)
+	if !ok {
+		t.Fatalf("stmt not *ast.ExpressionStatement. got=%T", program.Statements[0])
+	}
+	sel, ok := exprStmt.Expression.(*ast.SelectorExpression)
+	if !ok {
+		t.Fatalf("expression not *ast.SelectorExpression. got=%T", exprStmt.Expression)
+	}
+	if sel.Field != "speed" {
+		t.Fatalf("sel.Field not speed. got=%s", sel.Field)
+	}
+	if !testIdentifier(t, sel.Object.(*ast.SelectorExpression).Object, "d") {
+		t.Fatalf("innermost object not as expected")
+	}
+	if sel.Object.(*ast.SelectorExpression).Field != "motor" {
+		t.Fatalf("inner field not motor")
+	}
+}

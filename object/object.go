@@ -3,12 +3,16 @@ package object
 import (
 	"fmt"
 	"ruli/ast"
+	"sort"
 	"strings"
 )
 
 type Environment struct {
 	store map[string]Object
 	outer *Environment
+
+	// struct 型定義の登録 (型名 → 定義)
+	typeDefs map[string]*StructDef
 }
 
 func NewEnvironment() *Environment {
@@ -48,6 +52,25 @@ func (e *Environment) Assign(name string, val Object) bool {
 	return false
 }
 
+// DefineType は struct 型定義を現在のスコープに登録する
+func (e *Environment) DefineType(name string, def *StructDef) {
+	if e.typeDefs == nil {
+		e.typeDefs = make(map[string]*StructDef)
+	}
+	e.typeDefs[name] = def
+}
+
+// GetTypeDef は struct 型定義を外側スコープも含めて検索する
+func (e *Environment) GetTypeDef(name string) (*StructDef, bool) {
+	if def, ok := e.typeDefs[name]; ok {
+		return def, true
+	}
+	if e.outer != nil {
+		return e.outer.GetTypeDef(name)
+	}
+	return nil, false
+}
+
 type ObjectType string
 
 type Object interface {
@@ -66,6 +89,7 @@ const (
 	RETURN_OBJ   = "RETURN"
 	STRING_OBJ   = "STRING"
 	ARRAY_OBJ    = "ARRAY"
+	STRUCT_OBJ   = "STRUCT"
 	ERROR_OBJ    = "ERROR"
 )
 
@@ -205,6 +229,63 @@ func (a *Array) Inspect() string {
 	out.WriteString("]")
 
 	return out.String()
+}
+
+// Struct は SPEC 4.3 の struct 型の値。フィールドは公開、値渡し (Copy)
+type Struct struct {
+	Fields map[string]Object
+}
+
+func (s *Struct) Type() ObjectType {
+	return STRUCT_OBJ
+}
+
+func (s *Struct) Inspect() string {
+	// map の順序は不定なのでソートして安定表示にする
+	names := make([]string, 0, len(s.Fields))
+	for name := range s.Fields {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+
+	var out strings.Builder
+
+	out.WriteString("{")
+
+	for i, name := range names {
+		if i > 0 {
+			out.WriteString(", ")
+		}
+		out.WriteString(name + ": " + s.Fields[name].Inspect())
+	}
+
+	out.WriteString("}")
+
+	return out.String()
+}
+
+// Copy は SPEC 4.3 (値渡し) に従い struct を再帰的に複製する
+func (s *Struct) Copy() *Struct {
+	fields := make(map[string]Object, len(s.Fields))
+
+	for name, el := range s.Fields {
+		switch v := el.(type) {
+		case *Struct:
+			fields[name] = v.Copy()
+		case *Array:
+			fields[name] = v.Copy()
+		default:
+			fields[name] = el
+		}
+	}
+
+	return &Struct{Fields: fields}
+}
+
+// StructDef は struct 型の実行時定義 (ゼロ値構築に使用)
+type StructDef struct {
+	FieldNames []string
+	FieldTypes map[string]string // フィールド名 → 型名
 }
 
 type Error struct {

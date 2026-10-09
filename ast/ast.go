@@ -404,6 +404,46 @@ func (ie *IndexExpression) GetToken() lexer.Token {
 	return ie.Token
 }
 
+// SelectorExpression は m.speed のようなフィールドアクセス
+type SelectorExpression struct {
+	Token  lexer.Token
+	Object Expression
+	Field  string
+}
+
+func (se *SelectorExpression) expressionNode() {}
+
+func (se *SelectorExpression) String() string {
+	return se.Object.String() + "." + se.Field
+}
+
+func (se *SelectorExpression) GetToken() lexer.Token {
+	return se.Token
+}
+
+// StructField は struct 宣言の 1 フィールド
+type StructField struct {
+	Name string
+	Type TypeNode
+}
+
+// TypeDeclStatement は type Motor struct { ... } のような型宣言
+type TypeDeclStatement struct {
+	Token  lexer.Token
+	Name   string
+	Fields []StructField
+}
+
+func (tds *TypeDeclStatement) statementNode() {}
+
+func (tds *TypeDeclStatement) String() string {
+	return "type " + tds.Name
+}
+
+func (tds *TypeDeclStatement) GetToken() lexer.Token {
+	return tds.Token
+}
+
 type BooleanLiteral struct {
 	Token lexer.Token
 	Value bool

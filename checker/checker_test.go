@@ -237,3 +237,95 @@ func TestCheckCastRealIntMix(t *testing.T) {
 		t,
 	)
 }
+
+func TestCheckStructValid(t *testing.T) {
+	input := `type Motor struct {
+	speed: INT
+	enable: BOOL
+}
+type Drive struct {
+	gear: WORD
+	motor: Motor
+}
+
+m : Motor
+m.speed = 10
+m.enable = m.speed == 10
+
+d : Drive
+d.motor = m
+d.motor.speed = 1
+
+f(m.speed)
+func f(a: INT) INT {
+	return a
+}`
+	if errs := Check(parseInput(input)); len(errs) > 0 {
+		t.Fatalf("unexpected errors: %v", errs)
+	}
+}
+
+func TestCheckStructUndefinedType(t *testing.T) {
+	testCheckErrors(
+		`m : Nope`,
+		[]string{"unknown type: Nope"},
+		t,
+	)
+}
+
+func TestCheckStructUndefinedField(t *testing.T) {
+	testCheckErrors(
+		`type Motor struct {
+	speed: INT
+}
+
+m : Motor
+m.nope = 1`,
+		[]string{"undefined field: nope"},
+		t,
+	)
+}
+
+func TestCheckStructFieldTypeMismatch(t *testing.T) {
+	testCheckErrors(
+		`type Motor struct {
+	speed: INT
+}
+
+m : Motor
+m.speed = true`,
+		[]string{"type mismatch: INT = BOOL"},
+		t,
+	)
+}
+
+func TestCheckStructCompare(t *testing.T) {
+	testCheckErrors(
+		`type Motor struct {
+	speed: INT
+}
+
+a : Motor
+b : Motor
+a == b`,
+		[]string{"cannot compare STRUCT"},
+		t,
+	)
+}
+
+func TestCheckStructForwardReference(t *testing.T) {
+	// 宣言収集 (SPEC 2.1) により後続の struct も参照できる
+	input := `type Drive struct {
+	motor: Motor
+}
+type Motor struct {
+	speed: INT
+}
+
+m : Motor
+d : Drive
+d.motor = m`
+	if errs := Check(parseInput(input)); len(errs) > 0 {
+		t.Fatalf("unexpected errors: %v", errs)
+	}
+}

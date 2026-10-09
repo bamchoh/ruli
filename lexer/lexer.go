@@ -125,6 +125,9 @@ func (l *Lexer) NextToken() Token {
 	case ';':
 		tok = l.newToken(SEMICOLON, ";")
 
+	case '.':
+		tok = l.newToken(DOT, ".")
+
 	case '"':
 		tok = l.newToken(STRING_LIT, l.readString())
 

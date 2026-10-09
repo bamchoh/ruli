@@ -178,6 +178,9 @@ func (p *Parser) parseStatement() ast.Statement {
 	case lexer.RETURN:
 		return p.parseReturnStatement()
 
+	case lexer.TYPE:
+		return p.parseTypeDeclStatement()
+
 	case lexer.IDENT:
 
 		switch p.peekToken.Type {
@@ -329,10 +332,42 @@ func (p *Parser) parseIdentifier() ast.Expression {
 		return p.parseCast()
 	}
 
-	return &ast.Identifier{
+	ident := &ast.Identifier{
 		Token: p.curToken,
 		Value: p.curToken.Literal,
 	}
+
+	if p.peekToken.Type == lexer.DOT {
+		// フィールドアクセス: m.speed
+		return p.parseSelector(ident)
+	}
+
+	return ident
+}
+
+// parseSelector は m.a.b のようなドット連鎖をパースする
+func (p *Parser) parseSelector(left ast.Expression) ast.Expression {
+	p.nextToken() // .
+	p.nextToken() // first field name
+
+	exp := &ast.SelectorExpression{
+		Token:  left.GetToken(),
+		Object: left,
+		Field:  p.curToken.Literal,
+	}
+
+	for p.peekToken.Type == lexer.DOT {
+		p.nextToken() // .
+		p.nextToken() // next field name
+
+		exp = &ast.SelectorExpression{
+			Token:  exp.GetToken(),
+			Object: exp,
+			Field:  p.curToken.Literal,
+		}
+	}
+
+	return exp
 }
 
 func (p *Parser) parseCast() ast.Expression {
@@ -558,6 +593,53 @@ func (p *Parser) parseExpressionList(end lexer.TokenType) []ast.Expression {
 	}
 
 	return list
+}
+
+// parseTypeDeclStatement は type Motor struct { ... } をパースする
+func (p *Parser) parseTypeDeclStatement() *ast.TypeDeclStatement {
+	stmt := &ast.TypeDeclStatement{
+		Token: p.curToken,
+	}
+
+	p.nextToken() // type name
+	stmt.Name = p.curToken.Literal
+
+	if !p.expectPeek(lexer.STRUCT) {
+		return stmt
+	}
+
+	p.nextToken() // struct
+	p.nextToken() // {
+	p.nextToken() // first field or }
+
+	for p.curToken.Type != lexer.RBRACE && p.curToken.Type != lexer.EOF {
+		field := ast.StructField{
+			Name: p.curToken.Literal,
+		}
+
+		if !p.expectPeek(lexer.COLON) {
+			return stmt
+		}
+
+		p.nextToken() // :
+		p.nextToken() // type name
+
+		field.Type = p.parseType()
+		if field.Type == nil {
+			p.errorAt(p.curToken, "unknown type '%s'", tokenLabel(p.curToken))
+		}
+
+		stmt.Fields = append(stmt.Fields, field)
+
+		// 次のフィールド (または }) へ
+		p.nextToken()
+	}
+
+	if p.curToken.Type == lexer.EOF {
+		p.errorAt(p.curToken, "expected '}', got EOF")
+	}
+
+	return stmt
 }
 
 func (p *Parser) parseReturnStatement() *ast.ReturnStatement {

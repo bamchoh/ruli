@@ -26,10 +26,14 @@ func isError(obj object.Object) bool {
 	return false
 }
 
-// bindValue は SPEC 4.4 (値渡し) に従い、変数への束縛時に配列を複製する
+// bindValue は SPEC 4.4 / 4.3 (値渡し) に従い、変数への束縛時に
+// 配列・struct を複製する
 func bindValue(val object.Object) object.Object {
-	if arr, ok := val.(*object.Array); ok {
-		return arr.Copy()
+	switch v := val.(type) {
+	case *object.Array:
+		return v.Copy()
+	case *object.Struct:
+		return v.Copy()
 	}
 	return val
 }

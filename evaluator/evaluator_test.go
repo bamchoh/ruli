@@ -301,3 +301,60 @@ func TestCastTruncatesToInteger(t *testing.T) {
 	// 実数 → 整数は 0 方向へ切り捨て
 	testEvalInteger(`DINT(REAL(7) / REAL(2))`, 3, t)
 }
+
+func TestStructZeroInitAndFields(t *testing.T) {
+	testEvalInteger(
+		`type Motor struct {
+	speed: INT
+	enable: BOOL
+}
+m : Motor
+m.speed = 5
+m.speed`,
+		5,
+		t,
+	)
+}
+
+func TestStructCopyOnBind(t *testing.T) {
+	// SPEC 4.3: struct は値渡し
+	testEvalInteger(
+		`type Motor struct {
+	speed: INT
+}
+
+m : Motor
+m.speed = 5
+n := m
+n.speed = 99
+m.speed`,
+		5,
+		t,
+	)
+}
+
+func TestStructCopyOnFunctionArg(t *testing.T) {
+	testEvalInteger(
+		`type Motor struct {
+	speed: INT
+}
+
+func set(x) INT {
+	x.speed = 99
+	return x.speed
+}
+
+m : Motor
+m.speed = 5
+set(m)
+m.speed`,
+		5,
+		t,
+	)
+}
+
+func TestTypedDeclZeroValues(t *testing.T) {
+	// 型だけの宣言はゼロ値で初期化される
+	testEvalInteger(`x : INT
+x`, 0, t)
+}

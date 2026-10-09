@@ -21,6 +21,9 @@ func (e *TypeError) Error() string {
 type Checker struct {
 	env *Env
 
+	// struct 型宣言のレジストリ (型名 → 型)
+	types map[string]*Type
+
 	// 現在チェック中の関数の戻り値型 (関数外なら nil)
 	returnType *Type
 	inFunction bool
@@ -31,12 +34,15 @@ type Checker struct {
 // Check はプログラム全体を型チェックし、見つかったエラーすべてを返す。
 // SPEC 2.1 に従い、まずトップレベルの func 宣言を登録してから文を順にチェックする
 func Check(program *ast.Program) []TypeError {
-	c := &Checker{env: NewEnv()}
+	c := &Checker{env: NewEnv(), types: make(map[string]*Type)}
 
 	// 宣言収集: 順不同の呼び出しと再帰を可能にする
 	for _, stmt := range program.Statements {
-		if fn, ok := stmt.(*ast.FunctionStatement); ok {
-			c.registerFunctionSignature(fn, c.env)
+		switch s := stmt.(type) {
+		case *ast.FunctionStatement:
+			c.registerFunctionSignature(s, c.env)
+		case *ast.TypeDeclStatement:
+			c.registerStructType(s)
 		}
 	}
 
@@ -83,8 +89,48 @@ func (c *Checker) checkStatement(n ast.Statement, env *Env) {
 		c.checkReturn(stmt, env)
 	case *ast.ExpressionStatement:
 		c.checkExpr(stmt.Expression, env)
+	case *ast.TypeDeclStatement:
+		c.checkTypeDecl(stmt, env)
 	case *ast.BreakStatement, *ast.ContinueStatement:
 	}
+}
+
+// registerStructType は struct 宣言を型レジストリに登録する。
+// 宣言収集パスで先に呼ばれ、フィールドは後で checkTypeDecl が解決する
+func (c *Checker) registerStructType(n *ast.TypeDeclStatement) *Type {
+	if st, ok := c.types[n.Name]; ok {
+		return st
+	}
+
+	st := &Type{Name: STRUCT_TYPE.Name, Fields: map[string]*Type{}}
+	c.types[n.Name] = st
+	return st
+}
+
+// checkTypeDecl は struct のフィールド型を解決して登録する
+func (c *Checker) checkTypeDecl(n *ast.TypeDeclStatement, env *Env) {
+	st := c.registerStructType(n)
+
+	fields := make(map[string]*Type, len(n.Fields))
+	names := make([]string, 0, len(n.Fields))
+
+	for _, field := range n.Fields {
+		if _, dup := fields[field.Name]; dup {
+			c.errAt(n.GetToken(), "duplicate field: %s", field.Name)
+			continue
+		}
+
+		ft := c.resolveTypeNode(field.Type)
+		if ft == nil {
+			continue
+		}
+
+		names = append(names, field.Name)
+		fields[field.Name] = ft
+	}
+
+	st.FieldNames = names
+	st.Fields = fields
 }
 
 func (c *Checker) checkIf(stmt *ast.IfStatement, env *Env) {
@@ -246,6 +292,39 @@ func (c *Checker) checkAssign(stmt *ast.AssignStatement, env *Env) {
 			)
 		}
 
+	case *ast.SelectorExpression:
+		ot := c.checkExpr(left.Object, env)
+		if ot == nil {
+			return
+		}
+
+		if ot.Name == ANY_TYPE.Name || ot.Name == UNKNOWN_TYPE.Name {
+			c.checkExpr(stmt.Value, env)
+			return
+		}
+
+		if ot.Name != STRUCT_TYPE.Name {
+			c.errAt(left.GetToken(), "no field '%s' on %s", left.Field, ot.Name)
+			return
+		}
+
+		ft, ok := ot.Fields[left.Field]
+		if !ok {
+			c.errAt(left.GetToken(), "undefined field: %s", left.Field)
+			return
+		}
+
+		vt := c.checkExpr(stmt.Value, env)
+		if vt != nil && !ft.Equal(vt) {
+			c.errAt(
+				stmt.Value.GetToken(),
+				"type mismatch: %s %s %s",
+				ft.Name,
+				"=",
+				vt.Name,
+			)
+		}
+
 	default:
 		c.errAt(stmt.GetToken(), "invalid assignment target")
 	}
@@ -333,6 +412,9 @@ func (c *Checker) resolveTypeNode(node ast.TypeNode) *Type {
 	switch n := node.(type) {
 	case *ast.BasicType:
 		if t, ok := resolveBasic(n.Name); ok {
+			return t
+		}
+		if t, ok := c.types[n.Name]; ok {
 			return t
 		}
 		c.errAt(n.GetToken(), "unknown type: %s", n.Name)
@@ -424,6 +506,28 @@ func (c *Checker) checkExpr(expr ast.Expression, env *Env) *Type {
 
 	case *ast.CastExpression:
 		return c.checkCast(e, env)
+
+	case *ast.SelectorExpression:
+		ot := c.checkExpr(e.Object, env)
+		if ot == nil {
+			return nil
+		}
+
+		if ot.Name == ANY_TYPE.Name || ot.Name == UNKNOWN_TYPE.Name {
+			return UNKNOWN_TYPE
+		}
+
+		if ot.Name != STRUCT_TYPE.Name {
+			c.errAt(e.Object.GetToken(), "no field '%s' on %s", e.Field, ot.Name)
+			return nil
+		}
+
+		ft, ok := ot.Fields[e.Field]
+		if !ok {
+			c.errAt(e.GetToken(), "undefined field: %s", e.Field)
+			return nil
+		}
+		return ft
 	}
 
 	return nil
@@ -434,6 +538,20 @@ func (c *Checker) checkBinary(be *ast.BinaryExpression, env *Env) *Type {
 	rt := c.checkExpr(be.Right, env)
 	if lt == nil || rt == nil {
 		return nil
+	}
+
+	// 型不明のオペランド (未指定引数など) は演算の正否を判断できないので通す
+	if lt.Name == UNKNOWN_TYPE.Name || lt.Name == ANY_TYPE.Name {
+		if isNumeric(rt) {
+			return rt
+		}
+		return UNKNOWN_TYPE
+	}
+	if rt.Name == UNKNOWN_TYPE.Name || rt.Name == ANY_TYPE.Name {
+		if isNumeric(lt) {
+			return lt
+		}
+		return UNKNOWN_TYPE
 	}
 
 	switch be.Operator {
@@ -458,6 +576,14 @@ func (c *Checker) checkBinary(be *ast.BinaryExpression, env *Env) *Type {
 		}
 
 	case "==", "!=":
+		// 比較可能なのは基本値型のみ (配列 / struct / 関数は値渡しなので比較は禁止)
+		for _, t := range []*Type{lt, rt} {
+			switch t.Name {
+			case STRUCT_TYPE.Name, ARRAY_TYPE.Name, FUNCTION_TYPE.Name:
+				c.errAt(be.GetToken(), "cannot compare %s", t.Name)
+				return nil
+			}
+		}
 		if lt.Equal(rt) {
 			return BOOL_TYPE
 		}
