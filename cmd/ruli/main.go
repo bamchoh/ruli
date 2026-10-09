@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"ruli/evaluator"
@@ -10,27 +11,40 @@ import (
 )
 
 func main() {
-	input := `flag := false
-if flag {
-	print("Flag is true")
-} else {
-	print("Flag is false")
-}`
+	if len(os.Args) != 2 {
+		fmt.Fprintln(os.Stderr, "usage: ruli <script>")
+		os.Exit(1)
+	}
 
-	l := lexer.New(input)
+	if err := run(os.Args[1]); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+}
+
+func run(path string) error {
+	src, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+
+	l := lexer.New(string(src))
 	p := parser.New(l)
 	program := p.ParseProgram()
+
 	if errs := p.Errors(); len(errs) > 0 {
+		parseErrs := make([]error, 0, len(errs))
 		for _, e := range errs {
-			fmt.Fprintln(os.Stderr, e.Error())
+			parseErrs = append(parseErrs, &e)
 		}
-		os.Exit(1)
+		return errors.Join(parseErrs...)
 	}
 
 	env := object.NewEnvironment()
 	result := evaluator.Eval(program, env)
 	if errObj, ok := result.(*object.Error); ok {
-		fmt.Fprintln(os.Stderr, errObj.Inspect())
-		os.Exit(1)
+		return errors.New(errObj.Inspect())
 	}
+
+	return nil
 }

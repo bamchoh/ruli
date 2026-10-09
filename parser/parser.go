@@ -663,7 +663,5 @@ func (p *Parser) parseIndexExpression(left ast.Expression) ast.Expression {
 
 	p.nextToken() // consume ]
 
-	p.nextToken()
-
 	return exp
 }
