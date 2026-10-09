@@ -48,6 +48,10 @@ var builtins = map[string]*object.Builtin{
 
 func Eval(node ast.Node, env *object.Environment) object.Object {
 
+	if node == nil {
+		return &object.Null{}
+	}
+
 	switch node := node.(type) {
 
 	case *ast.Program:
@@ -155,7 +159,7 @@ func Eval(node ast.Node, env *object.Environment) object.Object {
 
 	}
 
-	return &object.Null{}
+	return newErrorAtNode(node, "unsupported node type: %T", node)
 }
 
 func evalProgram(program *ast.Program, env *object.Environment) object.Object {
@@ -185,20 +189,31 @@ func evalBinaryExpression(be *ast.BinaryExpression, env *object.Environment) obj
 
 	switch {
 	case left.Type() == object.INTEGER_OBJ && right.Type() == object.INTEGER_OBJ:
-		return evalIntegerBinaryExpression(be.Operator, left, right)
+		return evalIntegerBinaryExpression(be, left, right)
+	case left.Type() == object.REAL_OBJ && right.Type() == object.REAL_OBJ:
+		return evalRealBinaryExpression(be, left, right)
 	case left.Type() == object.STRING_OBJ && right.Type() == object.STRING_OBJ:
-		return evalStringInfixExpression(be.Operator, left, right)
+		return evalStringInfixExpression(be, left, right)
 	}
 
-	return &object.Null{}
+	return newErrorAtNode(
+		be,
+		"type mismatch: %s %s %s",
+		left.Type(),
+		be.Operator,
+		right.Type(),
+	)
 }
 
-func evalIntegerBinaryExpression(operator string, left, right object.Object) object.Object {
+func evalIntegerBinaryExpression(
+	be *ast.BinaryExpression,
+	left, right object.Object,
+) object.Object {
 
 	lv := left.(*object.Integer).Value
 	rv := right.(*object.Integer).Value
 
-	switch operator {
+	switch be.Operator {
 	case "+":
 		return &object.Integer{Value: lv + rv}
 	case "-":
@@ -206,6 +221,9 @@ func evalIntegerBinaryExpression(operator string, left, right object.Object) obj
 	case "*":
 		return &object.Integer{Value: lv * rv}
 	case "/":
+		if rv == 0 {
+			return newErrorAtNode(be, "division by zero")
+		}
 		return &object.Integer{Value: lv / rv}
 
 	case ">":
@@ -218,14 +236,51 @@ func evalIntegerBinaryExpression(operator string, left, right object.Object) obj
 		return nativeBoolToBooleanObject(lv != rv)
 	}
 
-	return &object.Null{}
+	return newErrorAtNode(be, "unsupported operator: %s", be.Operator)
 }
 
-func evalStringInfixExpression(operator string, left, right object.Object) object.Object {
+func evalRealBinaryExpression(
+	be *ast.BinaryExpression,
+	left, right object.Object,
+) object.Object {
+
+	lv := left.(*object.Real).Value
+	rv := right.(*object.Real).Value
+
+	switch be.Operator {
+	case "+":
+		return &object.Real{Value: lv + rv}
+	case "-":
+		return &object.Real{Value: lv - rv}
+	case "*":
+		return &object.Real{Value: lv * rv}
+	case "/":
+		if rv == 0 {
+			return newErrorAtNode(be, "division by zero")
+		}
+		return &object.Real{Value: lv / rv}
+
+	case ">":
+		return nativeBoolToBooleanObject(lv > rv)
+	case "<":
+		return nativeBoolToBooleanObject(lv < rv)
+	case "==":
+		return nativeBoolToBooleanObject(lv == rv)
+	case "!=":
+		return nativeBoolToBooleanObject(lv != rv)
+	}
+
+	return newErrorAtNode(be, "unsupported operator: %s", be.Operator)
+}
+
+func evalStringInfixExpression(
+	be *ast.BinaryExpression,
+	left, right object.Object,
+) object.Object {
 	lv := left.(*object.String).Value
 	rv := right.(*object.String).Value
 
-	switch operator {
+	switch be.Operator {
 	case "+":
 		return &object.String{Value: lv + rv}
 	case "==":
@@ -234,7 +289,7 @@ func evalStringInfixExpression(operator string, left, right object.Object) objec
 		return nativeBoolToBooleanObject(lv != rv)
 	}
 
-	return &object.Null{}
+	return newErrorAtNode(be, "unsupported operator: %s", be.Operator)
 }
 
 func nativeBoolToBooleanObject(input bool) *object.Boolean {
@@ -298,17 +353,27 @@ func isTruthy(obj object.Object) bool {
 
 func evalIncDecStatement(stmt *ast.IncDecStatement, env *object.Environment) object.Object {
 
-	v, _ := env.Get(stmt.Name)
-	iv := v.(*object.Integer).Value
-
-	if stmt.Operator == "++" {
-		iv++
-	} else {
-		iv--
+	v, ok := env.Get(stmt.Name)
+	if !ok {
+		return newErrorAtNode(stmt, "identifier not found: %s", stmt.Name)
 	}
 
-	obj := &object.Integer{Value: iv}
-	env.Set(stmt.Name, obj)
+	obj, ok := v.(*object.Integer)
+	if !ok {
+		return newErrorAtNode(
+			stmt,
+			"operand of %s must be an integer, got %s",
+			stmt.Operator,
+			v.Type(),
+		)
+	}
+
+	if stmt.Operator == "++" {
+		obj.Value++
+	} else {
+		obj.Value--
+	}
+
 	return obj
 }
 
@@ -382,6 +447,14 @@ func evalCallExpression(node *ast.CallExpression, env *object.Environment) objec
 		return result
 
 	case *object.Function:
+		if len(args) != len(fn.Parameters) {
+			return newErrorAtNode(
+				node,
+				"wrong number of arguments. got=%d, want=%d",
+				len(args),
+				len(fn.Parameters),
+			)
+		}
 		return applyFunction(fn, args)
 	}
 
