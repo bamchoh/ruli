@@ -10,10 +10,12 @@ import (
 )
 
 func main() {
-	input := `nums := [1,2,3]
-print(len(nums))
-print(nums[10])
-`
+	input := `flag := false
+if flag {
+	print("Flag is true")
+} else {
+	print("Flag is false")
+}`
 
 	l := lexer.New(input)
 	p := parser.New(l)
