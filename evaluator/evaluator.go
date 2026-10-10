@@ -823,7 +823,7 @@ func evalCallExpression(node *ast.CallExpression, env *object.Environment) objec
 				len(fn.Parameters),
 			)
 		}
-		return applyFunction(fn, args)
+		return applyFunction(fn, args, node, env)
 	}
 
 	return newErrorAtNode(node, "not a function: %s", function.Type())
@@ -974,11 +974,28 @@ func isIntFamilyName(name string) bool {
 	return false
 }
 
-func applyFunction(fn *object.Function, args []object.Object) object.Object {
+func applyFunction(
+	fn *object.Function,
+	args []object.Object,
+	callNode *ast.CallExpression,
+	callEnv *object.Environment,
+) object.Object {
 
 	extendedEnv := object.NewEnclosedEnvironment(fn.Env)
 
 	for i, param := range fn.Parameters {
+
+		// ref パラメータ (SPEC 8.1 / IEC VAR_IN_OUT) は引数を共有する。
+		// 配列 / struct はエイリアスで即時反映、スカラーは終了時に書き戻す
+		if param.Ref {
+			if bt, ok := param.Type.(*ast.BasicType); ok {
+				extendedEnv.DeclareTyped(param.Name, args[i], bt.Name)
+				continue
+			}
+			extendedEnv.Set(param.Name, args[i])
+			continue
+		}
+
 		stored := bindValue(args[i])
 
 		// 型付きパラメータは実行時幅チェックと型名の記録を行う
@@ -997,6 +1014,9 @@ func applyFunction(fn *object.Function, args []object.Object) object.Object {
 	if isError(result) {
 		return result
 	}
+
+	// スカラー ref パラメータの書き戻し (正常終了時のみ)
+	writeBackRefs(fn, callNode, callEnv, extendedEnv)
 
 	if rv, ok := result.(*object.ReturnValue); ok {
 		if len(rv.Values) == 1 {
@@ -1222,6 +1242,56 @@ func envTypeName(e *ast.Identifier, env *object.Environment) string {
 		return t
 	}
 	return ""
+}
+
+// writeBackRefs はスカラー ref パラメータ (SPEC 8.1 / IEC VAR_IN_OUT) を
+// 呼び出し元の変数へ書き戻す。配列 / struct は引数共有 (エイリアス) 的に
+// 即時反映のため書き戻しは不要
+func writeBackRefs(
+	fn *object.Function,
+	callNode *ast.CallExpression,
+	callEnv *object.Environment,
+	fnEnv *object.Environment,
+) {
+
+	for i, param := range fn.Parameters {
+		if !param.Ref || i >= len(callNode.Arguments) {
+			continue
+		}
+
+		value, ok := fnEnv.Get(param.Name)
+		if !ok {
+			continue
+		}
+
+		// スカラーのみ書き戻す (配列 / struct はエイリアスで反映済み)
+		switch value.(type) {
+		case *object.Integer, *object.Real, *object.Boolean, *object.String:
+		default:
+			continue
+		}
+
+		if i >= len(callNode.Arguments) {
+			continue
+		}
+
+		arg := callNode.Arguments[i]
+		switch target := arg.(type) {
+
+		case *ast.Identifier:
+			callEnv.Assign(target.Value, value)
+
+		case *ast.SelectorExpression:
+			evalSelectorWrite(target, callEnv, func(old object.Object) object.Object {
+				return value
+			})
+
+		case *ast.IndexExpression:
+			evalIndexWrite(target, callEnv, func(old object.Object) object.Object {
+				return value
+			})
+		}
+	}
 }
 
 func evalIndexAssign(

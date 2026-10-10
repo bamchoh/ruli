@@ -731,3 +731,84 @@ func TestLessEqualsGreaterEquals(t *testing.T) {
 	testEvalBool(`REAL(1) <= REAL(2)`, true, t)
 	testEvalBool(`REAL(2) >= REAL(3)`, false, t)
 }
+
+func TestRefStructPropagates(t *testing.T) {
+	// ref 引数の struct 変更は呼び出し元に反映される
+	testEvalInteger(
+		`type Motor struct {
+	speed: INT
+}
+
+func stop(ref m: Motor) BOOL {
+	m.speed = 0
+	return true
+}
+
+m : Motor
+m.speed = 42
+stop(m)
+m.speed`,
+		0,
+		t,
+	)
+}
+
+func TestRefArrayPropagates(t *testing.T) {
+	testEvalInteger(
+		`buf := [7, 8, 9]
+func zero(ref a) BOOL {
+	a[0] = 0
+	return true
+}
+zero(buf)
+buf[0]`,
+		0,
+		t,
+	)
+}
+
+func TestRefScalarWriteBack(t *testing.T) {
+	// スカラー ref は終了時に書き戻される (VAR_IN_OUT)
+	testEvalInteger(
+		`func addTen(ref n: INT) BOOL {
+	n += 10
+	return true
+}
+x := 5
+addTen(x)
+x`,
+		15,
+		t,
+	)
+	testEvalInteger(
+		`func bump(ref n: INT) BOOL {
+	n++
+	return true
+}
+y := 5
+bump(y)
+y`,
+		6,
+		t,
+	)
+}
+
+func TestValuePassStillCopies(t *testing.T) {
+	// ref なしのパラメータは今までどおりコピー
+	testEvalInteger(
+		`type Motor struct {
+	speed: INT
+}
+
+func broken(m: Motor) BOOL {
+	m.speed = 99
+	return true
+}
+
+m : Motor
+broken(m)
+m.speed`,
+		0,
+		t,
+	)
+}

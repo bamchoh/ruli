@@ -677,3 +677,76 @@ x := M(1)`,
 		t,
 	)
 }
+
+func TestCheckRefValid(t *testing.T) {
+	input := `type Motor struct {
+	speed: INT
+}
+
+m : Motor
+
+func stop(ref m: Motor) BOOL {
+	m.speed = 0
+	return true
+}
+stop(m)
+
+func stop2(ref m) BOOL {
+	m.speed = 0
+	return true
+}
+
+nums := [1, 2, 3]
+func zero(ref a) BOOL {
+	a[0] = 0
+	return true
+}
+zero(nums)
+
+func addTen(ref n: INT) BOOL {
+	n += 10
+	return true
+}
+x := 1
+addTen(x)`
+	if errs := Check(parseInput(input)); len(errs) > 0 {
+		t.Fatalf("unexpected errors: %v", errs)
+	}
+}
+
+func TestCheckRefArgMustBeVariable(t *testing.T) {
+	// ref 引数は代入可能な変数のみ (IEC の IN_OUT)
+	testCheckErrors(
+		`func f(ref n: INT) BOOL {
+	return true
+}
+f(1)`,
+		[]string{"ref argument must be a variable: 1"},
+		t,
+	)
+	testCheckErrors(
+		`func f(ref n: INT) BOOL {
+	return true
+}
+f(1 + 2)`,
+		[]string{"ref argument must be a variable: (1 + 2)"},
+		t,
+	)
+}
+
+func TestCheckRefArgType(t *testing.T) {
+	testCheckErrors(
+		`type M struct {
+	s: INT
+}
+
+func f(ref m: M) BOOL {
+	return true
+}
+
+y := 1
+f(y)`,
+		[]string{"type mismatch: argument 1: expected STRUCT, got INT"},
+		t,
+	)
+}

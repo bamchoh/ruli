@@ -675,8 +675,11 @@ func (c *Checker) checkReturn(stmt *ast.ReturnStatement, env *Env) {
 // registerFunctionSignature は関数のシグネチャ型を現在スコープに登録する
 func (c *Checker) registerFunctionSignature(stmt *ast.FunctionStatement, env *Env) *Type {
 	params := make([]Type, 0, len(stmt.Parameters))
+	refs := make([]bool, 0, len(stmt.Parameters))
 
 	for _, param := range stmt.Parameters {
+		refs = append(refs, param.Ref)
+
 		if param.Type == nil {
 			params = append(params, *ANY_TYPE)
 			continue
@@ -700,7 +703,7 @@ func (c *Checker) registerFunctionSignature(stmt *ast.FunctionStatement, env *En
 		returns = append(returns, t)
 	}
 
-	fn := &Type{Name: FUNCTION_TYPE.Name, Params: params, Returns: returns}
+	fn := &Type{Name: FUNCTION_TYPE.Name, Params: params, Refs: refs, Returns: returns}
 	env.Set(stmt.Name, fn)
 	return fn
 }
@@ -1093,6 +1096,16 @@ func (c *Checker) checkCall(e *ast.CallExpression, env *Env) *Type {
 	}
 
 	for i := range fnType.Params {
+		// ref パラメータ (SPEC 8.1) は変数 (識別子 / フィールド / 要素) のみ渡せる
+		if fnType.Refs[i] && !isVariableForm(e.Arguments[i]) {
+			c.errAt(
+				e.Arguments[i].GetToken(),
+				"ref argument must be a variable: %s",
+				e.Arguments[i].String(),
+			)
+			return nil
+		}
+
 		if fnType.Params[i].Name == ANY_TYPE.Name {
 			continue
 		}
@@ -1219,6 +1232,15 @@ func distinctBase(t *Type) *Type {
 		return t.Base
 	}
 	return t
+}
+
+// isVariableForm は ref 引数として渡せる (書き込み可能な) 変数形式か
+func isVariableForm(expr ast.Expression) bool {
+	switch expr.(type) {
+	case *ast.Identifier, *ast.SelectorExpression, *ast.IndexExpression:
+		return true
+	}
+	return false
 }
 
 func (c *Checker) checkBuiltinCall(name string, e *ast.CallExpression, env *Env) *Type {

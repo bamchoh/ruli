@@ -1149,3 +1149,26 @@ func TestDistinctTypeParse(t *testing.T) {
 		t.Fatalf("distinct type must have no fields. got=%d", len(decl.Fields))
 	}
 }
+
+func TestRefParameterParse(t *testing.T) {
+	l := lexer.New(`func f(ref m: Motor, ref a, plain: INT) BOOL { return true }`)
+	p := New(l)
+	program := p.ParseProgram()
+	if len(p.Errors()) != 0 {
+		t.Fatalf("unexpected parse errors: %v", p.Errors())
+	}
+
+	fn := program.Statements[0].(*ast.FunctionStatement)
+	if len(fn.Parameters) != 3 {
+		t.Fatalf("Parameters does not contain 3. got=%d", len(fn.Parameters))
+	}
+	if !fn.Parameters[0].Ref || fn.Parameters[0].Name != "m" {
+		t.Fatalf("Parameters[0] not ref m. got=%+v", fn.Parameters[0])
+	}
+	if !fn.Parameters[1].Ref || fn.Parameters[1].Type != nil {
+		t.Fatalf("Parameters[1] not untyped ref. got=%+v", fn.Parameters[1])
+	}
+	if fn.Parameters[2].Ref {
+		t.Fatalf("Parameters[2] must not be ref")
+	}
+}

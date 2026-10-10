@@ -1014,10 +1014,16 @@ func (p *Parser) parseFunctionParameters() []ast.Parameter {
 	}
 
 	for {
-		p.nextToken() // param name
+		// ref 修飾子 (SPEC 8.1 / IEC VAR_IN_OUT): func f(ref m: Motor)
+		p.nextToken() // param name (または ref)
+		isRef := p.curToken.Type == lexer.REF
+		if isRef {
+			p.nextToken() // param name
+		}
 
 		param := ast.Parameter{
 			Name: p.curToken.Literal,
+			Ref:  isRef,
 		}
 
 		if p.peekToken.Type == lexer.COLON {

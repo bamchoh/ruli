@@ -386,6 +386,7 @@ func (cs *ContinueStatement) GetToken() lexer.Token {
 type Parameter struct {
 	Name string
 	Type TypeNode // 未指定なら nil (ANY)
+	Ref  bool     // VAR_IN_OUT 相当の参照渡し (SPEC 8.1)
 }
 
 type FunctionStatement struct {

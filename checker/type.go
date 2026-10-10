@@ -9,6 +9,7 @@ type Type struct {
 
 	// 関数型のシグネチャ (Name == FUNCTION のときのみ有効)
 	Params  []Type
+	Refs    []bool  // Params[i] が ref パラメータか (SPEC 8.1)
 	Returns []*Type // 複数戻り値 (SPEC 5.3)。空なら戻り値なし
 
 	// 配列の要素型 (Name == ARRAY のときのみ有効)
