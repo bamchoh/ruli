@@ -37,13 +37,16 @@ type Checker struct {
 func Check(program *ast.Program) []TypeError {
 	c := &Checker{env: NewEnv(), types: make(map[string]*Type)}
 
-	// 宣言収集: 順不同の呼び出しと再帰を可能にする
+	// 宣言収集 (SPEC 2.1): 順不同の参照と再帰を可能にする。
+	// struct (プレースホルダ) → func (シグネチャ) の 2 パスで登録する
 	for _, stmt := range program.Statements {
-		switch s := stmt.(type) {
-		case *ast.FunctionStatement:
-			c.registerFunctionSignature(s, c.env)
-		case *ast.TypeDeclStatement:
-			c.registerStructType(s)
+		if td, ok := stmt.(*ast.TypeDeclStatement); ok {
+			c.registerStructType(td)
+		}
+	}
+	for _, stmt := range program.Statements {
+		if fn, ok := stmt.(*ast.FunctionStatement); ok {
+			c.registerFunctionSignature(fn, c.env)
 		}
 	}
 
@@ -226,8 +229,8 @@ func (c *Checker) checkVarDecl(stmt *ast.VarDeclStatement, env *Env) {
 				c.errAt(
 					stmt.GetToken(),
 					"type mismatch: declared %s, got %s",
-					dt.Name,
-					vt.Name,
+					dt.String(),
+					vt.String(),
 				)
 				return
 			}
@@ -272,9 +275,9 @@ func (c *Checker) checkAssign(stmt *ast.AssignStatement, env *Env) {
 			c.errAt(
 				stmt.GetToken(),
 				"type mismatch: %s %s %s",
-				declared.Name,
+				declared.String(),
 				"=",
-				vt.Name,
+				vt.String(),
 			)
 		}
 
@@ -289,6 +292,21 @@ func (c *Checker) checkAssign(stmt *ast.AssignStatement, env *Env) {
 			return
 		}
 
+		// 既知サイズへのリテラルインデックスは静的に判定する
+		if array.Name == ARRAY_TYPE.Name && array.ArrLen > 0 {
+			if lit, ok := left.Index.(*ast.IntegerLiteral); ok {
+				if lit.Value < 0 || lit.Value >= array.ArrLen {
+					c.errAt(
+						lit.GetToken(),
+						"index out of range: %d (array size %d)",
+						lit.Value,
+						array.ArrLen,
+					)
+					return
+				}
+			}
+		}
+
 		index := c.checkExpr(left.Index, env)
 		if index != nil && index.Name != INT_TYPE.Name {
 			c.errAt(
@@ -299,14 +317,19 @@ func (c *Checker) checkAssign(stmt *ast.AssignStatement, env *Env) {
 			return
 		}
 
+		// 固定幅要素へのリテラル代入は範囲を静的に検査する
+		if array.Elem != nil {
+			c.checkLiteralRange(array.Elem.Name, stmt.Value)
+		}
+
 		vt := c.checkExpr(stmt.Value, env)
 		if vt != nil && array.Elem != nil && !array.Elem.Equal(vt) {
 			c.errAt(
 				stmt.Value.GetToken(),
 				"type mismatch: %s %s %s",
-				array.Elem.Name,
+				array.Elem.String(),
 				"=",
-				vt.Name,
+				vt.String(),
 			)
 		}
 
@@ -516,14 +539,13 @@ func (c *Checker) registerFunctionSignature(stmt *ast.FunctionStatement, env *En
 	params := make([]Type, 0, len(stmt.Parameters))
 
 	for _, param := range stmt.Parameters {
-		if param.Type == "" {
+		if param.Type == nil {
 			params = append(params, *ANY_TYPE)
 			continue
 		}
 
-		t, ok := resolveBasic(param.Type)
-		if !ok {
-			c.errAt(stmt.GetToken(), "unknown type: %s", param.Type)
+		t := c.resolveTypeNode(param.Type)
+		if t == nil {
 			params = append(params, *ANY_TYPE)
 			continue
 		}
@@ -532,12 +554,12 @@ func (c *Checker) registerFunctionSignature(stmt *ast.FunctionStatement, env *En
 
 	returns := make([]*Type, 0, len(stmt.ReturnTypes))
 	for _, rt := range stmt.ReturnTypes {
-		if t, ok := resolveBasic(rt); ok {
-			returns = append(returns, t)
-		} else {
-			c.errAt(stmt.GetToken(), "unknown type: %s", rt)
+		t := c.resolveTypeNode(rt)
+		if t == nil {
 			returns = append(returns, UNKNOWN_TYPE)
+			continue
 		}
+		returns = append(returns, t)
 	}
 
 	fn := &Type{Name: FUNCTION_TYPE.Name, Params: params, Returns: returns}
@@ -619,6 +641,12 @@ func (c *Checker) resolveTypeNode(node ast.TypeNode) *Type {
 		}
 		c.errAt(n.GetToken(), "unknown type: %s", n.Name)
 		return nil
+	case *ast.ArrayType:
+		elem := c.resolveTypeNode(n.Elem)
+		if elem == nil {
+			return nil
+		}
+		return &Type{Name: ARRAY_TYPE.Name, Elem: elem, ArrLen: n.Size}
 	}
 
 	return nil
@@ -670,7 +698,12 @@ func (c *Checker) checkExpr(expr ast.Expression, env *Env) *Type {
 			}
 		}
 
-		return &Type{Name: ARRAY_TYPE.Name, Elem: elem}
+		// リテラルの長さはサイズとして型に含める (SPEC 4.4)
+		return &Type{
+			Name:   ARRAY_TYPE.Name,
+			Elem:   elem,
+			ArrLen: len(e.Elements),
+		}
 
 	case *ast.BinaryExpression:
 		return c.checkBinary(e, env)
@@ -684,6 +717,21 @@ func (c *Checker) checkExpr(expr ast.Expression, env *Env) *Type {
 		if array.Name != ARRAY_TYPE.Name && array.Name != ANY_TYPE.Name {
 			c.errAt(e.GetToken(), "not an array")
 			return nil
+		}
+
+		// 既知サイズへのリテラルインデックスは静的に判定する (SPEC 4.7 の強化)
+		if array.Name == ARRAY_TYPE.Name && array.ArrLen > 0 {
+			if lit, ok := e.Index.(*ast.IntegerLiteral); ok {
+				if lit.Value < 0 || lit.Value >= array.ArrLen {
+					c.errAt(
+						lit.GetToken(),
+						"index out of range: %d (array size %d)",
+						lit.Value,
+						array.ArrLen,
+					)
+					return nil
+				}
+			}
 		}
 
 		index := c.checkExpr(e.Index, env)
@@ -875,7 +923,7 @@ func (c *Checker) checkCall(e *ast.CallExpression, env *Env) *Type {
 				e.Arguments[i].GetToken(),
 				"type mismatch: argument %d: expected %s, got %s",
 				i+1,
-				fnType.Params[i].Name,
+				fnType.Params[i].String(),
 				argTypes[i].Name,
 			)
 		}

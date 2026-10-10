@@ -100,11 +100,11 @@ func Eval(node ast.Node, env *object.Environment) object.Object {
 		// 実行時の struct 型定義を登録する (ゼロ値構築に使用)
 		def := &object.StructDef{
 			FieldNames: make([]string, 0, len(node.Fields)),
-			FieldTypes: make(map[string]string, len(node.Fields)),
+			FieldTypes: make(map[string]ast.TypeNode, len(node.Fields)),
 		}
 		for _, field := range node.Fields {
 			def.FieldNames = append(def.FieldNames, field.Name)
-			def.FieldTypes[field.Name] = field.Type.String()
+			def.FieldTypes[field.Name] = field.Type
 		}
 		env.DefineType(node.Name, def)
 		return &object.Null{}
@@ -713,13 +713,23 @@ func evalSelectorExpression(
 	return v
 }
 
-// zeroValueForTypeNode は m : Motor のような初期値なし宣言のゼロ値を作る
+// zeroValueForTypeNode は m : Motor や values : [10]INT のような
+// 初期値なし宣言のゼロ値を作る
 func zeroValueForTypeNode(node ast.TypeNode, env *object.Environment) object.Object {
-	basic, ok := node.(*ast.BasicType)
-	if !ok {
-		return &object.Null{}
+	switch t := node.(type) {
+	case *ast.ArrayType:
+		// SPEC 4.4: 固定長配列のゼロ値 (0 埋め)
+		elements := make([]object.Object, t.Size)
+		for i := range elements {
+			elements[i] = zeroValueForTypeNode(t.Elem, env)
+		}
+		return &object.Array{Elements: elements}
+
+	case *ast.BasicType:
+		return zeroValue(env, t.Name)
 	}
-	return zeroValue(env, basic.Name)
+
+	return &object.Null{}
 }
 
 func zeroValue(env *object.Environment, typeName string) object.Object {
@@ -739,7 +749,7 @@ func zeroValue(env *object.Environment, typeName string) object.Object {
 	if def, ok := env.GetTypeDef(typeName); ok {
 		fields := make(map[string]object.Object, len(def.FieldTypes))
 		for name, ft := range def.FieldTypes {
-			fields[name] = zeroValue(env, ft)
+			fields[name] = zeroValueForTypeNode(ft, env)
 		}
 		return &object.Struct{Fields: fields}
 	}
@@ -762,8 +772,18 @@ func applyFunction(fn *object.Function, args []object.Object) object.Object {
 	extendedEnv := object.NewEnclosedEnvironment(fn.Env)
 
 	for i, param := range fn.Parameters {
-		// SPEC 5.2: 引数は完全値渡し
-		extendedEnv.Set(param.Name, bindValue(args[i]))
+		stored := bindValue(args[i])
+
+		// 型付きパラメータは実行時幅チェックと型名の記録を行う
+		if bt, ok := param.Type.(*ast.BasicType); ok {
+			if errObj := checkWidth(fn.Body, bt.Name, stored); errObj != nil {
+				return errObj
+			}
+			extendedEnv.DeclareTyped(param.Name, stored, bt.Name)
+			continue
+		}
+
+		extendedEnv.Set(param.Name, stored)
 	}
 
 	result := Eval(fn.Body, extendedEnv)
@@ -866,7 +886,7 @@ func evalSelectorAssign(
 	if parentType := typeNameOfExpr(left.Object, env); parentType != "" {
 		if def, ok := env.GetTypeDef(parentType); ok {
 			if fieldType, ok := def.FieldTypes[left.Field]; ok {
-				if errObj := checkWidth(left, fieldType, val); errObj != nil {
+				if errObj := checkWidth(left, basicTypeName(fieldType), val); errObj != nil {
 					return errObj
 				}
 			}
@@ -878,22 +898,36 @@ func evalSelectorAssign(
 	return val
 }
 
+// basicTypeName は TypeNode から幅チェック可能な基本型名を取り出す
+// (配列型などは空文字を返し、幅チェックは行われない)
+func basicTypeName(node ast.TypeNode) string {
+	if bt, ok := node.(*ast.BasicType); ok {
+		return bt.Name
+	}
+	return ""
+}
+
 // typeNameOfExpr は式が参照する変数の宣言時型名を返す (判定不能なら "")
 // セレクタの親をたどって struct フィールドの型名も解決する
 func typeNameOfExpr(expr ast.Expression, env *object.Environment) string {
 	switch e := expr.(type) {
 	case *ast.Identifier:
-		if t, ok := env.VarType(e.Value); ok {
-			return t
-		}
+		return envTypeName(e, env)
 	case *ast.SelectorExpression:
 		parent := typeNameOfExpr(e.Object, env)
 		if parent == "" {
 			return ""
 		}
 		if def, ok := env.GetTypeDef(parent); ok {
-			return def.FieldTypes[e.Field]
+			return basicTypeName(def.FieldTypes[e.Field])
 		}
+	}
+	return ""
+}
+
+func envTypeName(e *ast.Identifier, env *object.Environment) string {
+	if t, ok := env.VarType(e.Value); ok {
+		return t
 	}
 	return ""
 }

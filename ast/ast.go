@@ -326,14 +326,14 @@ func (cs *ContinueStatement) GetToken() lexer.Token {
 
 type Parameter struct {
 	Name string
-	Type string
+	Type TypeNode // 未指定なら nil (ANY)
 }
 
 type FunctionStatement struct {
 	Token       lexer.Token
 	Name        string
 	Parameters  []Parameter
-	ReturnTypes []string // 複数戻り値 (SPEC 5.3)。空なら戻り値なし
+	ReturnTypes []TypeNode // 単一 / 複数 (SPEC 5.3) の戻り値型。空なら戻り値なし
 	Body        *BlockStatement
 }
 
@@ -497,6 +497,23 @@ func (se *SelectorExpression) String() string {
 
 func (se *SelectorExpression) GetToken() lexer.Token {
 	return se.Token
+}
+
+// ArrayType は [10]INT のような固定長配列型 (SPEC 4.4)
+type ArrayType struct {
+	Token lexer.Token // '['
+	Size  int         // 要素数 (常に 1 以上)
+	Elem  TypeNode    // 要素型 ([3][3]INT ではさらに ArrayType)
+}
+
+func (at *ArrayType) typeNode() {}
+
+func (at *ArrayType) String() string {
+	return fmt.Sprintf("[%d]%s", at.Size, at.Elem.String())
+}
+
+func (at *ArrayType) GetToken() lexer.Token {
+	return at.Token
 }
 
 // StructField は struct 宣言の 1 フィールド

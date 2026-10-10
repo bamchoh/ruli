@@ -487,3 +487,44 @@ func TestModOperator(t *testing.T) {
 		t.Fatalf("wrong error. got=%s", msg)
 	}
 }
+
+func TestArrayZeroInit(t *testing.T) {
+	// SPEC 4.4: 固定長配列はゼロ値で初期化される
+	testEvalInteger(
+		`values : [10]INT
+len(values)`,
+		10,
+		t,
+	)
+	testEvalInteger(
+		`values : [10]INT
+values[9]`,
+		0,
+		t,
+	)
+}
+
+func TestNestedArrayZeroInit(t *testing.T) {
+	testEvalInteger(
+		`matrix : [3][3]INT
+len(matrix[2])`,
+		3,
+		t,
+	)
+	testEvalInteger(
+		`matrix : [3][3]INT
+matrix[2][2]`,
+		0,
+		t,
+	)
+}
+
+func TestArrayWidthCheckingOnDeclElement(t *testing.T) {
+	// 宣言リテラルの初回要素の幅チェックは実行時にも行われる
+	testEvalError(
+		`y := 5
+x : SINT = y * 100`,
+		"value 500 out of range for SINT (-128..127)",
+		t,
+	)
+}

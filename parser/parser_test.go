@@ -454,16 +454,16 @@ func TestFunction1Statement(t *testing.T) {
 		}
 
 		param1 := funcStmt.Parameters[0]
-		if param1.Name != "a" || param1.Type != "INT" {
+		if param1.Name != "a" || param1.Type.String() != "INT" {
 			t.Fatalf("Parameter 1 not as expected. got=%s %s", param1.Name, param1.Type)
 		}
 
 		param2 := funcStmt.Parameters[1]
-		if param2.Name != "b" || param2.Type != "INT" {
+		if param2.Name != "b" || param2.Type.String() != "INT" {
 			t.Fatalf("Parameter 2 not as expected. got=%s %s", param2.Name, param2.Type)
 		}
 
-		if len(funcStmt.ReturnTypes) != 1 || funcStmt.ReturnTypes[0] != "INT" {
+		if len(funcStmt.ReturnTypes) != 1 || funcStmt.ReturnTypes[0].String() != "INT" {
 			t.Fatalf("Return type not as expected. got=%v", funcStmt.ReturnTypes)
 		}
 
@@ -513,12 +513,12 @@ func TestFunction2Statement(t *testing.T) {
 		}
 
 		param1 := funcStmt.Parameters[0]
-		if param1.Name != "a" || param1.Type != "INT" {
+		if param1.Name != "a" || param1.Type.String() != "INT" {
 			t.Fatalf("Parameter 1 not as expected. got=%s %s", param1.Name, param1.Type)
 		}
 
 		param2 := funcStmt.Parameters[1]
-		if param2.Name != "b" || param2.Type != "INT" {
+		if param2.Name != "b" || param2.Type.String() != "INT" {
 			t.Fatalf("Parameter 2 not as expected. got=%s %s", param2.Name, param2.Type)
 		}
 
@@ -891,7 +891,8 @@ func TestMultiReturnFunction(t *testing.T) {
 	if !ok {
 		t.Fatalf("stmt not *ast.FunctionStatement. got=%T", program.Statements[0])
 	}
-	if len(fn.ReturnTypes) != 2 || fn.ReturnTypes[0] != "INT" || fn.ReturnTypes[1] != "BOOL" {
+	if len(fn.ReturnTypes) != 2 ||
+		fn.ReturnTypes[0].String() != "INT" || fn.ReturnTypes[1].String() != "BOOL" {
 		t.Fatalf("ReturnTypes not as expected. got=%v", fn.ReturnTypes)
 	}
 }
@@ -931,4 +932,84 @@ func TestMultiAssignStatement(t *testing.T) {
 	if len(stmt.Lefts) != 2 {
 		t.Fatalf("Lefts does not contain 2. got=%d", len(stmt.Lefts))
 	}
+}
+
+func TestArrayTypeParse(t *testing.T) {
+	input := `values : [10]INT`
+
+	l := lexer.New(input)
+	p := New(l)
+	program := p.ParseProgram()
+	if len(p.Errors()) != 0 {
+		t.Fatalf("unexpected parse errors: %v", p.Errors())
+	}
+	if len(program.Statements) != 1 {
+		t.Fatalf("program.Statements does not contain 1 statement. got=%d", len(program.Statements))
+	}
+
+	decl, ok := program.Statements[0].(*ast.VarDeclStatement)
+	if !ok {
+		t.Fatalf("stmt not *ast.VarDeclStatement. got=%T", program.Statements[0])
+	}
+	at, ok := decl.Type.(*ast.ArrayType)
+	if !ok {
+		t.Fatalf("decl.Type not *ast.ArrayType. got=%T", decl.Type)
+	}
+	if at.Size != 10 {
+		t.Fatalf("at.Size not 10. got=%d", at.Size)
+	}
+	if at.Elem.String() != "INT" {
+		t.Fatalf("at.Elem not INT. got=%s", at.Elem.String())
+	}
+}
+
+func TestNestedArrayTypeParse(t *testing.T) {
+	l := lexer.New(`matrix: [3][3]INT`)
+	p := New(l)
+	program := p.ParseProgram()
+	if len(p.Errors()) != 0 {
+		t.Fatalf("unexpected parse errors: %v", p.Errors())
+	}
+
+	decl := program.Statements[0].(*ast.VarDeclStatement)
+	at := decl.Type.(*ast.ArrayType)
+	if at.Size != 3 {
+		t.Fatalf("outer Size not 3. got=%d", at.Size)
+	}
+	nested, ok := at.Elem.(*ast.ArrayType)
+	if !ok {
+		t.Fatalf("at.Elem not *ast.ArrayType. got=%T", at.Elem)
+	}
+	if nested.Size != 3 || nested.Elem.String() != "INT" {
+		t.Fatalf("nested not as expected")
+	}
+}
+
+func TestArrayParamAndReturnTypeParse(t *testing.T) {
+	input := `func f(v: [4]INT) [4]INT {
+	return [1, 2, 3, 4]
+}`
+	l := lexer.New(input)
+	p := New(l)
+	program := p.ParseProgram()
+	if len(p.Errors()) != 0 {
+		t.Fatalf("unexpected parse errors: %v", p.Errors())
+	}
+
+	fn := program.Statements[0].(*ast.FunctionStatement)
+	if fn.Parameters[0].Type.String() != "[4]INT" {
+		t.Fatalf("param type not [4]INT. got=%s", fn.Parameters[0].Type.String())
+	}
+	if fn.ReturnTypes[0].String() != "[4]INT" {
+		t.Fatalf("return type not [4]INT. got=%s", fn.ReturnTypes[0].String())
+	}
+}
+
+func TestArrayTypeParseErrors(t *testing.T) {
+	// エラー復帰を持たないためカスケードする
+	testParseErrors(`x : [0]INT`, []string{
+		"array size must be positive, got 0",
+		"unknown type '0'",
+		"unexpected token ']'",
+	}, t)
 }

@@ -343,7 +343,7 @@ func (s *Struct) Copy() *Struct {
 // StructDef は struct 型の実行時定義 (ゼロ値構築に使用)
 type StructDef struct {
 	FieldNames []string
-	FieldTypes map[string]string // フィールド名 → 型名
+	FieldTypes map[string]ast.TypeNode // フィールド名 → 型ノード
 }
 
 type Error struct {

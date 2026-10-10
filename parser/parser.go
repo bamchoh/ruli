@@ -328,9 +328,57 @@ func (p *Parser) parseType() ast.TypeNode {
 	case lexer.IDENT:
 		// distinct type / struct名 将来対応
 		return &ast.BasicType{Token: p.curToken, Name: p.curToken.Literal}
+
+	case lexer.LBRACKET:
+		return p.parseArrayType()
 	}
 
 	return nil
+}
+
+// parseArrayType は [10]INT / [3][3]INT のような固定長配列型をパースする (SPEC 4.4)
+func (p *Parser) parseArrayType() ast.TypeNode {
+	token := p.curToken // [
+
+	p.nextToken() // size literal
+
+	if p.curToken.Type != lexer.INT_LIT {
+		p.errorAt(p.curToken, "array size must be an integer literal, got '%s'", tokenLabel(p.curToken))
+		return nil
+	}
+
+	if p.curToken.Literal == "" {
+		return nil
+	}
+
+	size, err := strconv.Atoi(p.curToken.Literal)
+	if err != nil {
+		p.errorAt(p.curToken, "array size must be an integer literal: %s", p.curToken.Literal)
+		return nil
+	}
+	if size <= 0 {
+		p.errorAt(p.curToken, "array size must be positive, got %d", size)
+		return nil
+	}
+
+	if !p.expectPeek(lexer.RBRACKET) {
+		return nil
+	}
+
+	p.nextToken() // ]
+	p.nextToken() // element type first token
+
+	elem := p.parseType()
+	if elem == nil {
+		p.errorAt(p.curToken, "unknown element type '%s'", tokenLabel(p.curToken))
+		return nil
+	}
+
+	return &ast.ArrayType{
+		Token: token,
+		Size:  size,
+		Elem:  elem,
+	}
 }
 
 func (p *Parser) parseExpression(precedence int) ast.Expression {
@@ -755,10 +803,10 @@ func (p *Parser) parseFunctionStatement() *ast.FunctionStatement {
 	p.nextToken() // (
 	stmt.Parameters = p.parseFunctionParameters()
 
-	// 戻り値型省略可
-	if p.peekToken.Type == lexer.IDENT {
+	// 戻り値型省略可 (配列型 [4]INT も可)
+	if p.peekToken.Type == lexer.IDENT || p.peekToken.Type == lexer.LBRACKET {
 		p.nextToken()
-		stmt.ReturnTypes = []string{p.curToken.Literal}
+		stmt.ReturnTypes = []ast.TypeNode{p.parseType()}
 	}
 
 	// 複数戻り値型 (SPEC 5.3): (INT, BOOL)
@@ -772,10 +820,11 @@ func (p *Parser) parseFunctionStatement() *ast.FunctionStatement {
 				continue
 			}
 
-			if _, ok := resolveTypeName(p.curToken); !ok {
+			rt := p.parseType()
+			if rt == nil {
 				p.errorAt(p.curToken, "unknown type '%s'", tokenLabel(p.curToken))
 			}
-			stmt.ReturnTypes = append(stmt.ReturnTypes, p.curToken.Literal)
+			stmt.ReturnTypes = append(stmt.ReturnTypes, rt)
 			p.nextToken() // next return type or )
 		}
 
@@ -814,7 +863,10 @@ func (p *Parser) parseFunctionParameters() []ast.Parameter {
 		if p.peekToken.Type == lexer.COLON {
 			p.nextToken() // :
 			p.nextToken() // type
-			param.Type = p.curToken.Literal
+			param.Type = p.parseType()
+			if param.Type == nil {
+				p.errorAt(p.curToken, "unknown type '%s'", tokenLabel(p.curToken))
+			}
 		}
 
 		params = append(params, param)

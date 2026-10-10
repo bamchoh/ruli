@@ -1,5 +1,7 @@
 package checker
 
+import "fmt"
+
 // Type は型を表す
 type Type struct {
 	// 基本型名。INT / BOOL / REAL / STRING / ARRAY / FUNCTION / VOID / ANY
@@ -10,7 +12,8 @@ type Type struct {
 	Returns []*Type // 複数戻り値 (SPEC 5.3)。空なら戻り値なし
 
 	// 配列の要素型 (Name == ARRAY のときのみ有効)
-	Elem *Type
+	Elem   *Type
+	ArrLen int // 配列サイズ (SPEC 4.4: 型の一部)。0 はサイズ不明 (推論失敗など)
 
 	// struct フィールド (Name == STRUCT のときのみ有効)
 	FieldNames []string
@@ -39,6 +42,10 @@ func (t *Type) Equal(other *Type) bool {
 
 	switch t.Name {
 	case ARRAY_TYPE.Name:
+		// サイズは型の一部 (SPEC 4.4)
+		if t.ArrLen != other.ArrLen {
+			return false
+		}
 		return t.Elem.Equal(other.Elem)
 	case STRUCT_TYPE.Name:
 		// 構造的に同型か (同名の異なる宣言は同一視しないが、同構造は許す)
@@ -174,4 +181,18 @@ func isRealFamily(name string) bool {
 // 数値型 (整数族 + 実数族)
 func isNumeric(t *Type) bool {
 	return isIntFamily(t.Name) || isRealFamily(t.Name)
+}
+
+// String は型を人間可読に整形する (配列は [10]INT 形式)
+func (t *Type) String() string {
+	switch t.Name {
+	case ARRAY_TYPE.Name:
+		if t.ArrLen > 0 {
+			return fmt.Sprintf("[%d]%s", t.ArrLen, t.Elem.String())
+		}
+		if t.Elem != nil {
+			return fmt.Sprintf("%s[]", t.Elem.String())
+		}
+	}
+	return t.Name
 }

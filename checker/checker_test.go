@@ -418,3 +418,66 @@ func TestCheckReturnCount(t *testing.T) {
 		t,
 	)
 }
+
+func TestCheckArrayTypeValid(t *testing.T) {
+	input := `values : [10]INT
+matrix : [3][3]INT
+
+values[0] = 5
+values[9] = -1
+matrix[2][1] = 7
+n := len(values)
+small := [1, 2, 3]
+x : [3]INT = small
+
+buf : [4]SINT
+buf[0] = -128
+
+func f(v: [4]INT) INT {
+	return v[0]
+}
+x2 := f([1, 2, 3, 4])
+
+func g() [4]INT {
+	return [1, 2, 3, 4]
+}
+y := g()`
+	if errs := Check(parseInput(input)); len(errs) > 0 {
+		t.Fatalf("unexpected errors: %v", errs)
+	}
+}
+
+func TestCheckArraySizeMismatch(t *testing.T) {
+	// SPEC 4.4: サイズは型の一部
+	testCheckErrors(
+		`a := [1, 2, 3]
+x : [10]INT = a`,
+		[]string{"type mismatch: declared [10]INT, got [3]INT"},
+		t,
+	)
+}
+
+func TestCheckArrayElementWidth(t *testing.T) {
+	testCheckErrors(
+		`values : [10]SINT
+values[0] = 300`,
+		[]string{"value 300 out of range for SINT (-128..127)"},
+		t,
+	)
+}
+
+func TestCheckArrayStaticBounds(t *testing.T) {
+	// SPEC 4.7 を静的に強化: 既知サイズへのリテラルインデックス
+	testCheckErrors(
+		`values := [1, 2, 3]
+values[3]`,
+		[]string{"index out of range: 3 (array size 3)"},
+		t,
+	)
+	testCheckErrors(
+		`values := [1, 2, 3]
+x := values[5]`,
+		[]string{"index out of range: 5 (array size 3)"},
+		t,
+	)
+}
