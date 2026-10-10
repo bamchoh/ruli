@@ -1126,3 +1126,26 @@ func TestLogicalExpressionPrecedence(t *testing.T) {
 		t.Fatalf("and.Left not BinaryExpression. got=%T", and.Left)
 	}
 }
+
+func TestDistinctTypeParse(t *testing.T) {
+	l := lexer.New(`type TEMP INT`)
+	p := New(l)
+	program := p.ParseProgram()
+	if len(p.Errors()) != 0 {
+		t.Fatalf("unexpected parse errors: %v", p.Errors())
+	}
+
+	decl, ok := program.Statements[0].(*ast.TypeDeclStatement)
+	if !ok {
+		t.Fatalf("stmt not *ast.TypeDeclStatement. got=%T", program.Statements[0])
+	}
+	if decl.Name != "TEMP" {
+		t.Fatalf("decl.Name not TEMP. got=%s", decl.Name)
+	}
+	if decl.Base == nil || decl.Base.String() != "INT" {
+		t.Fatalf("decl.Base not INT. got=%v", decl.Base)
+	}
+	if len(decl.Fields) != 0 {
+		t.Fatalf("distinct type must have no fields. got=%d", len(decl.Fields))
+	}
+}

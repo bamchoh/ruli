@@ -18,6 +18,9 @@ type Type struct {
 	// struct フィールド (Name == STRUCT のときのみ有効)
 	FieldNames []string
 	Fields     map[string]*Type
+
+	// distinct 型 (SPEC 4.2) の基本型 (Name == 宣言した型名のときのみ有効)
+	Base *Type
 }
 
 func (t *Type) Equal(other *Type) bool {

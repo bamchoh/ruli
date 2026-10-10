@@ -108,7 +108,7 @@ func (c *Checker) checkStatement(n ast.Statement, env *Env) {
 	}
 }
 
-// registerStructType は struct 宣言を型レジストリに登録する。
+// registerStructType は型宣言を型レジストリに登録する。
 // 宣言収集パスで先に呼ばれ、フィールドは後で checkTypeDecl が解決する
 func (c *Checker) registerStructType(n *ast.TypeDeclStatement) *Type {
 	if st, ok := c.types[n.Name]; ok {
@@ -120,8 +120,22 @@ func (c *Checker) registerStructType(n *ast.TypeDeclStatement) *Type {
 	return st
 }
 
-// checkTypeDecl は struct のフィールド型を解決して登録する
+// checkTypeDecl は型宣言の内容を解決して登録する
 func (c *Checker) checkTypeDecl(n *ast.TypeDeclStatement, env *Env) {
+	if n.Base != nil {
+		// distinct 型 (SPEC 4.2): 基本型は基本型のみ (struct/distinct は不可)
+		base, ok := resolveBasic(n.Base.String())
+		if !ok {
+			c.errAt(n.Base.GetToken(),
+				"distinct type base must be a basic type, got %s", n.Base.String())
+			return
+		}
+
+		st := &Type{Name: n.Name, Base: base}
+		c.types[n.Name] = st
+		return
+	}
+
 	st := c.registerStructType(n)
 
 	fields := make(map[string]*Type, len(n.Fields))
@@ -1043,7 +1057,10 @@ func (c *Checker) checkCall(e *ast.CallExpression, env *Env) *Type {
 			}
 			fnType = t
 		} else {
-			// ユーザ定義ではない → 組み込み関数
+			// ユーザ定義ではない → 型へのキャスト (SPEC 4.2 / 6.3) または組み込み関数
+			if _, isBasic := resolveBasic(ident.Value); isBasic || c.types[ident.Value] != nil {
+				return c.checkCallCast(ident.Value, e, env)
+			}
 			return c.checkBuiltinCall(ident.Value, e, env)
 		}
 	} else {
@@ -1113,35 +1130,95 @@ func (c *Checker) checkCast(e *ast.CastExpression, env *Env) *Type {
 		return nil
 	}
 
-	switch target.Name {
-	case BOOL_TYPE.Name:
-		if vt.Name != BOOL_TYPE.Name {
-			c.errAt(
-				e.Value.GetToken(),
-				"invalid cast: %s to BOOL",
-				vt.Name,
-			)
-			return nil
-		}
-	case STRING_TYPE.Name:
-		c.errAt(e.GetToken(), "casting to STRING is not supported")
+	if !castAllowed(target, vt) {
+		c.errAt(
+			e.Value.GetToken(),
+			"invalid cast: %s to %s",
+			vt.String(),
+			e.Type,
+		)
 		return nil
-	default:
-		// 数値型へのキャスト (整数族 / 実数族)
-		if !isNumeric(vt) {
-			c.errAt(
-				e.Value.GetToken(),
-				"invalid cast: %s to %s",
-				vt.Name,
-				target.Name,
-			)
-			return nil
-		}
-		// 整数リテラルの範囲外キャストは静的に検査する (WORD(70000) など)
-		c.checkLiteralRange(target.Name, e.Value)
+	}
+
+	// 整数リテラルの範囲外キャストは静的に検査する (WORD(70000) など)
+	c.checkLiteralRange(target.Name, e.Value)
+
+	return target
+}
+
+// checkCallCast はユーザ定義型への呼び出し形式キャスト (SPEC 4.2: TEMP(30)) を検査する
+func (c *Checker) checkCallCast(targetName string, e *ast.CallExpression, env *Env) *Type {
+	if len(e.Arguments) != 1 {
+		c.errAt(
+			e.GetToken(),
+			"wrong number of arguments. got=%d, want=1",
+			len(e.Arguments),
+		)
+		return nil
+	}
+
+	target, ok := resolveBasic(targetName)
+	if !ok {
+		target = c.types[targetName]
+	}
+
+	vt := c.checkExpr(e.Arguments[0], env)
+	if vt == nil {
+		return nil
+	}
+
+	if !castAllowed(target, vt) {
+		c.errAt(
+			e.Arguments[0].GetToken(),
+			"invalid cast: %s to %s",
+			vt.String(),
+			targetName,
+		)
+		return nil
 	}
 
 	return target
+}
+
+// castAllowed はキャストの許可規則 (SPEC 6.3 / 4.2):
+//   - 同型なら無変換
+//   - BOOL へは BOOL からのみ
+//   - STRING へは不可
+//   - 数値族から数値族へ (distinct 型は Base の族で判定)
+//   - struct / 配列 / 関数は不可
+func castAllowed(target *Type, vt *Type) bool {
+	if target == nil || vt == nil {
+		return false
+	}
+	if target.Equal(vt) {
+		return true
+	}
+
+	tBase := distinctBase(target)
+	vBase := distinctBase(vt)
+
+	switch tBase.Name {
+	case BOOL_TYPE.Name:
+		return vBase.Name == BOOL_TYPE.Name
+	case STRING_TYPE.Name, STRUCT_TYPE.Name:
+		return false
+	}
+
+	if !isNumeric(tBase) || !isNumeric(vBase) {
+		if vt.Name == STRING_TYPE.Name || vBase.Name == STRING_TYPE.Name {
+			return false
+		}
+	}
+
+	return isNumeric(tBase) && isNumeric(vBase)
+}
+
+// distinctBase は distinct 型のときは基本型を返す
+func distinctBase(t *Type) *Type {
+	if t != nil && t.Base != nil {
+		return t.Base
+	}
+	return t
 }
 
 func (c *Checker) checkBuiltinCall(name string, e *ast.CallExpression, env *Env) *Type {

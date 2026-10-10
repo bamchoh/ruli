@@ -775,7 +775,17 @@ func (p *Parser) parseTypeDeclStatement() *ast.TypeDeclStatement {
 	p.nextToken() // type name
 	stmt.Name = p.curToken.Literal
 
-	if !p.expectPeek(lexer.STRUCT) {
+	if p.peekToken.Type != lexer.STRUCT {
+		// distinct 型 (SPEC 4.2): type TEMP INT
+		if p.peekToken.Type == lexer.IDENT || p.peekToken.Type == lexer.LBRACKET {
+			p.nextToken() // base type first token
+			stmt.Base = p.parseType()
+			if stmt.Base == nil {
+				p.errorAt(p.curToken, "unknown base type '%s'", tokenLabel(p.curToken))
+			}
+		} else {
+			p.errorAtPeek("expected 'struct' or a base type, got '%s'", tokenLabel(p.peekToken))
+		}
 		return stmt
 	}
 

@@ -340,10 +340,13 @@ func (s *Struct) Copy() *Struct {
 	return &Struct{Fields: fields}
 }
 
-// StructDef は struct 型の実行時定義 (ゼロ値構築に使用)
+// StructDef は実行時の型定義 (ゼロ値構築に使用)
 type StructDef struct {
 	FieldNames []string
 	FieldTypes map[string]ast.TypeNode // フィールド名 → 型ノード
+
+	// distinct 型 (SPEC 4.2) のときは基本型名が入る (フィールドは空)
+	Base string
 }
 
 type Error struct {

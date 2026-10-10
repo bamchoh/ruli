@@ -600,11 +600,15 @@ type StructField struct {
 	Type TypeNode
 }
 
-// TypeDeclStatement は type Motor struct { ... } のような型宣言
+// TypeDeclStatement は型宣言
+//   - struct:  type Motor struct { ... }  (Fields が設定される)
+//   - distinct: type TEMP INT              (Base が設定される, SPEC 4.2)
 type TypeDeclStatement struct {
-	Token  lexer.Token
-	Name   string
+	Token lexer.Token
+	Name  string
+
 	Fields []StructField
+	Base   TypeNode // distinct 型の基底型
 }
 
 func (tds *TypeDeclStatement) statementNode() {}

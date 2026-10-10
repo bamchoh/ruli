@@ -616,3 +616,64 @@ func TestCheckComparisonOperators(t *testing.T) {
 		}
 	}
 }
+
+func TestCheckDistinctTypeValid(t *testing.T) {
+	input := `type TEMP INT
+type RATIO REAL
+
+t : TEMP
+t = TEMP(30)
+v := INT(t) + 10
+
+r : RATIO
+r = RATIO(REAL(1))
+
+func f(t: TEMP) BOOL {
+	return INT(t) > 20
+}
+f(t)`
+	if errs := Check(parseInput(input)); len(errs) > 0 {
+		t.Fatalf("unexpected errors: %v", errs)
+	}
+}
+
+func TestCheckDistinctTypeImplicitBase(t *testing.T) {
+	// SPEC 4.2: 基本型との暗黙変換なし
+	testCheckErrors(
+		`type TEMP INT
+t : TEMP = 30`,
+		[]string{"type mismatch: declared TEMP, got INT"},
+		t,
+	)
+}
+
+func TestCheckDistinctTypeArithmetic(t *testing.T) {
+	testCheckErrors(
+		`type TEMP INT
+t : TEMP
+t + 1`,
+		[]string{"type mismatch: TEMP + INT"},
+		t,
+	)
+}
+
+func TestCheckDistinctTypeCastBack(t *testing.T) {
+	// 基本型への明示キャストは可能
+	input := "type TEMP INT\nt : TEMP = TEMP(5)\nv := INT(t) + 1"
+	if errs := Check(parseInput(input)); len(errs) > 0 {
+		t.Fatalf("unexpected errors: %v", errs)
+	}
+}
+
+func TestCheckCastToStruct(t *testing.T) {
+	testCheckErrors(
+		`type M struct {
+	s: INT
+}
+
+m : M
+x := M(1)`,
+		[]string{"invalid cast: INT to M"},
+		t,
+	)
+}

@@ -98,7 +98,15 @@ func Eval(node ast.Node, env *object.Environment) object.Object {
 		return val
 
 	case *ast.TypeDeclStatement:
-		// 実行時の struct 型定義を登録する (ゼロ値構築に使用)
+		// 実行時の型定義を登録する (ゼロ値構築に使用)
+		if node.Base != nil {
+			// distinct 型 (SPEC 4.2)
+			env.DefineType(node.Name, &object.StructDef{
+				Base: basicTypeName(node.Base),
+			})
+			return &object.Null{}
+		}
+
 		def := &object.StructDef{
 			FieldNames: make([]string, 0, len(node.Fields)),
 			FieldTypes: make(map[string]ast.TypeNode, len(node.Fields)),
@@ -173,7 +181,7 @@ func Eval(node ast.Node, env *object.Environment) object.Object {
 		if isError(val) {
 			return val
 		}
-		return evalCast(node, val)
+		return evalCast(node, val, env)
 
 	case *ast.SelectorExpression:
 		obj := Eval(node.Object, env)
@@ -763,6 +771,29 @@ func evalPrefixExpression(node *ast.PrefixExpression, env *object.Environment) o
 
 func evalCallExpression(node *ast.CallExpression, env *object.Environment) object.Object {
 
+	// ユーザ定義型へのキャスト (SPEC 4.2): TEMP(30)
+	if ident, ok := node.Function.(*ast.Identifier); ok {
+		if _, isBuiltin := builtins[ident.Value]; !isBuiltin {
+			if _, defined := env.Get(ident.Value); !defined {
+				if _, isType := env.GetTypeDef(ident.Value); isType {
+					if len(node.Arguments) != 1 {
+						return newErrorAtNode(
+							node,
+							"wrong number of arguments. got=%d, want=1",
+							len(node.Arguments),
+						)
+					}
+
+					val := Eval(node.Arguments[0], env)
+					if isError(val) {
+						return val
+					}
+					return evalCastTo(ident.Value, val, env, node)
+				}
+			}
+		}
+	}
+
 	function := Eval(node.Function, env)
 
 	var args []object.Object
@@ -800,11 +831,35 @@ func evalCallExpression(node *ast.CallExpression, env *object.Environment) objec
 
 // evalCast は REAL(a) のような明示的キャストを実行する (SPEC 6.3)。
 // 静的な型チェックは checker が担当し、ここでは値変換のみを行う
-func evalCast(node *ast.CastExpression, val object.Object) object.Object {
+func evalCast(
+	node *ast.CastExpression,
+	val object.Object,
+	env *object.Environment,
+) object.Object {
+	return evalCastTo(node.Type, val, env, node)
+}
 
-	target := node.Type
+// evalCastTo はキャスト実行の本体。CastExpression と
+// ユーザ型への呼び出し形式キャスト (SPEC 4.2: TEMP(30)) が共有する
+func evalCastTo(
+	target string,
+	val object.Object,
+	env *object.Environment,
+	node ast.Node,
+) object.Object {
 
-	switch target {
+	// distinct 型 (SPEC 4.2) は基本型へ解決してから変換する
+	targetName := target
+	if def, ok := env.GetTypeDef(target); ok {
+		switch {
+		case def.Base != "":
+			targetName = def.Base
+		default:
+			return newErrorAtNode(node, "cannot cast to struct: %s", target)
+		}
+	}
+
+	switch targetName {
 	case "REAL", "LREAL":
 		switch v := val.(type) {
 		case *object.Real:
@@ -831,14 +886,14 @@ func evalCast(node *ast.CastExpression, val object.Object) object.Object {
 			return newErrorAtNode(node, "invalid cast: %s to %s", val.Type(), target)
 		}
 
-		if errObj := checkWidth(node, target, &object.Integer{Value: conv}); errObj != nil {
+		if errObj := checkWidth(node, targetName, &object.Integer{Value: conv}); errObj != nil {
 			return errObj
 		}
 
 		return &object.Integer{Value: conv}
 	}
 
-	return newErrorAtNode(node, "invalid cast: %s to %s", val.Type(), target)
+	return newErrorAtNode(node, "invalid cast: %s to %s", val.Type(), targetName)
 }
 
 // evalSelectorExpression は m.speed のようなフィールド読み出し
@@ -894,6 +949,11 @@ func zeroValue(env *object.Environment, typeName string) object.Object {
 	}
 
 	if def, ok := env.GetTypeDef(typeName); ok {
+		// distinct 型のゼロ値は基本型から構築する (SPEC 4.2)
+		if def.Base != "" {
+			return zeroValue(env, def.Base)
+		}
+
 		fields := make(map[string]object.Object, len(def.FieldTypes))
 		for name, ft := range def.FieldTypes {
 			fields[name] = zeroValueForTypeNode(ft, env)
