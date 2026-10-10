@@ -582,3 +582,37 @@ buf[3] += 1`,
 		t,
 	)
 }
+
+func TestCheckLogicalValid(t *testing.T) {
+	input := `flag := true
+x := 1
+ok := flag && x == 1 || !flag`
+	if errs := Check(parseInput(input)); len(errs) > 0 {
+		t.Fatalf("unexpected errors: %v", errs)
+	}
+}
+
+func TestCheckLogicalNonBool(t *testing.T) {
+	testCheckErrors(
+		`flag := 1 && true`,
+		[]string{"operand of && must be BOOL, got INT (left)"},
+		t,
+	)
+	testCheckErrors(
+		`flag := true && 1`,
+		[]string{"operand of && must be BOOL, got INT (right)"},
+		t,
+	)
+}
+
+func TestCheckComparisonOperators(t *testing.T) {
+	for _, input := range []string{
+		`x := 1 <= 2`,
+		`x := 2 >= 1`,
+		`x := REAL(1) <= REAL(2)`,
+	} {
+		if errs := Check(parseInput(input)); len(errs) > 0 {
+			t.Fatalf("unexpected errors (%q): %v", input, errs)
+		}
+	}
+}

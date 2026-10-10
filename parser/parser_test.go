@@ -1097,3 +1097,32 @@ func TestCompoundAssignIndexParse(t *testing.T) {
 		t.Fatalf("Target not *ast.IndexExpression. got=%T", stmt.Target)
 	}
 }
+
+func TestLogicalExpressionPrecedence(t *testing.T) {
+	// Go 相当の優先度: || < && < 比較
+	input := `x == 1 && flag || other`
+
+	l := lexer.New(input)
+	p := New(l)
+	program := p.ParseProgram()
+	if len(p.Errors()) != 0 {
+		t.Fatalf("unexpected parse errors: %v", p.Errors())
+	}
+
+	stmt, ok := program.Statements[0].(*ast.ExpressionStatement)
+	if !ok {
+		t.Fatalf("stmt not *ast.ExpressionStatement. got=%T", program.Statements[0])
+	}
+	// (x == 1 && flag) || other
+	or, ok := stmt.Expression.(*ast.LogicalExpression)
+	if !ok || or.Operator != "||" {
+		t.Fatalf("top not OR LogicalExpression. got=%T", stmt.Expression)
+	}
+	and, ok := or.Left.(*ast.LogicalExpression)
+	if !ok || and.Operator != "&&" {
+		t.Fatalf("left not AND LogicalExpression. got=%T", or.Left)
+	}
+	if _, ok := and.Left.(*ast.BinaryExpression); !ok {
+		t.Fatalf("and.Left not BinaryExpression. got=%T", and.Left)
+	}
+}

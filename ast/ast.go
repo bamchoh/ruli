@@ -148,6 +148,28 @@ func (pe *PrefixExpression) GetToken() lexer.Token {
 	return pe.Token
 }
 
+// LogicalExpression は && / || の short-circuit 評価 (SPEC 6.2)。
+// BinaryExpression は両辺を評価するため区別する
+type LogicalExpression struct {
+	Token    lexer.Token
+	Operator string // "&&" "||"
+	Left     Expression
+	Right    Expression
+}
+
+func (le *LogicalExpression) expressionNode() {}
+
+func (le *LogicalExpression) String() string {
+	return fmt.Sprintf("(%s %s %s)",
+		le.Left.String(),
+		le.Operator,
+		le.Right.String())
+}
+
+func (le *LogicalExpression) GetToken() lexer.Token {
+	return le.Token
+}
+
 // CastExpression は REAL(a) のような明示的キャスト (SPEC 6.3)
 type CastExpression struct {
 	Token lexer.Token

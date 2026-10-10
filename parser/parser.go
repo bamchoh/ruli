@@ -9,6 +9,8 @@ import (
 
 const (
 	LOWEST = iota
+	LOGICALOR
+	LOGICALAND
 	EQUALS
 	LESSGREATER
 	SUM
@@ -18,10 +20,14 @@ const (
 )
 
 var precedences = map[lexer.TokenType]int{
+	lexer.OR:       LOGICALOR,
+	lexer.AND:      LOGICALAND,
 	lexer.EQ:       EQUALS,
 	lexer.NOT_EQ:   EQUALS,
 	lexer.LT:       LESSGREATER,
 	lexer.GT:       LESSGREATER,
+	lexer.LE:       LESSGREATER,
+	lexer.GE:       LESSGREATER,
 	lexer.PLUS:     SUM,
 	lexer.MINUS:    SUM,
 	lexer.ASTERISK: PRODUCT,
@@ -91,6 +97,10 @@ func New(l *lexer.Lexer) *Parser {
 	p.registerInfix(lexer.NOT_EQ, p.parseInfixExpression)
 	p.registerInfix(lexer.LT, p.parseInfixExpression)
 	p.registerInfix(lexer.GT, p.parseInfixExpression)
+	p.registerInfix(lexer.LE, p.parseInfixExpression)
+	p.registerInfix(lexer.GE, p.parseInfixExpression)
+	p.registerInfix(lexer.AND, p.parseLogicalExpression)
+	p.registerInfix(lexer.OR, p.parseLogicalExpression)
 	p.registerInfix(lexer.LPAREN, p.parseCallExpression)
 	p.registerInfix(lexer.LBRACKET, p.parseIndexExpression)
 
@@ -553,6 +563,22 @@ func (p *Parser) parseInfixExpression(left ast.Expression) ast.Expression {
 	expr := &ast.BinaryExpression{
 		Left:     left,
 		Operator: p.curToken.Literal,
+	}
+
+	precedence := p.curPrecedence()
+	p.nextToken()
+
+	expr.Right = p.parseExpression(precedence)
+
+	return expr
+}
+
+// parseLogicalExpression は && / || をパースする (short-circuit 用に BinaryExpression と区別)
+func (p *Parser) parseLogicalExpression(left ast.Expression) ast.Expression {
+	expr := &ast.LogicalExpression{
+		Token:    p.curToken,
+		Operator: p.curToken.Literal,
+		Left:     left,
 	}
 
 	precedence := p.curPrecedence()

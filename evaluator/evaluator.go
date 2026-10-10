@@ -147,6 +147,9 @@ func Eval(node ast.Node, env *object.Environment) object.Object {
 	case *ast.BinaryExpression:
 		return evalBinaryExpression(node, env)
 
+	case *ast.LogicalExpression:
+		return evalLogicalExpression(node, env)
+
 	case *ast.IfStatement:
 		return evalIfStatement(node, env)
 
@@ -362,6 +365,58 @@ func applyBinaryOperator(
 	)
 }
 
+// evalLogicalExpression は && / || を short-circuit 評価する (SPEC 6.2)。
+// 左辺だけで結果が確定する場合、右辺は評価されない
+func evalLogicalExpression(node *ast.LogicalExpression, env *object.Environment) object.Object {
+
+	left := Eval(node.Left, env)
+	if isError(left) {
+		return left
+	}
+
+	lb, ok := left.(*object.Boolean)
+	if !ok {
+		return newErrorAtNode(
+			node,
+			"operand of %s must be BOOL, got %s",
+			node.Operator,
+			left.Type(),
+		)
+	}
+
+	// short-circuit
+	if node.Operator == "&&" && !lb.Value {
+		return FALSE
+	}
+	if node.Operator == "||" && lb.Value {
+		return TRUE
+	}
+
+	right := Eval(node.Right, env)
+	if isError(right) {
+		return right
+	}
+
+	rb, ok := right.(*object.Boolean)
+	if !ok {
+		return newErrorAtNode(
+			node,
+			"operand of %s must be BOOL, got %s",
+			node.Operator,
+			right.Type(),
+		)
+	}
+
+	switch node.Operator {
+	case "&&":
+		return nativeBoolToBooleanObject(lb.Value && rb.Value)
+	case "||":
+		return nativeBoolToBooleanObject(lb.Value || rb.Value)
+	}
+
+	return newErrorAtNode(node, "unsupported operator: %s", node.Operator)
+}
+
 func evalIntegerBinaryExpression(
 	operator string,
 	left, right object.Object,
@@ -393,6 +448,10 @@ func evalIntegerBinaryExpression(
 		return nativeBoolToBooleanObject(lv > rv)
 	case "<":
 		return nativeBoolToBooleanObject(lv < rv)
+	case "<=":
+		return nativeBoolToBooleanObject(lv <= rv)
+	case ">=":
+		return nativeBoolToBooleanObject(lv >= rv)
 	case "==":
 		return nativeBoolToBooleanObject(lv == rv)
 	case "!=":
@@ -433,6 +492,10 @@ func evalRealBinaryExpression(
 		return nativeBoolToBooleanObject(lv > rv)
 	case "<":
 		return nativeBoolToBooleanObject(lv < rv)
+	case "<=":
+		return nativeBoolToBooleanObject(lv <= rv)
+	case ">=":
+		return nativeBoolToBooleanObject(lv >= rv)
 	case "==":
 		return nativeBoolToBooleanObject(lv == rv)
 	case "!=":

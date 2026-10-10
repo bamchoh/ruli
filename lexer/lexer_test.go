@@ -153,3 +153,15 @@ func TestCompoundAssignTokens(t *testing.T) {
 		}
 	}
 }
+
+func TestLogicalAndComparisonTokens(t *testing.T) {
+	l := New("&& || <= >= !=")
+	expected := []TokenType{AND, OR, LE, GE, NOT_EQ, EOF}
+
+	for i, want := range expected {
+		tok := l.NextToken()
+		if tok.Type != want {
+			t.Fatalf("tests[%d] type wrong. expected=%q got=%q", i, want, tok.Type)
+		}
+	}
+}

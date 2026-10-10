@@ -49,6 +49,13 @@ const (
 	LT     = "<"
 	GT     = ">"
 
+	// SPEC 6.2 の残りの演算子
+	LE = "<="
+	GE = ">="
+
+	AND = "&&"
+	OR  = "||"
+
 	IF   = "IF"
 	ELSE = "ELSE"
 

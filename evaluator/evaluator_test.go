@@ -681,3 +681,53 @@ m.total`,
 		t,
 	)
 }
+
+func TestShortCircuitAnd(t *testing.T) {
+	// 左辺 false なら右辺の関数は呼ばれない
+	testEvalInteger(
+		`count := 0
+func bump() BOOL {
+	count++
+	return true
+}
+flag := false
+result := flag && bump()
+count`,
+		0,
+		t,
+	)
+}
+
+func TestShortCircuitOr(t *testing.T) {
+	// 左辺 true なら右辺の関数は呼ばれない
+	testEvalInteger(
+		`count := 0
+func bump() BOOL {
+	count++
+	return true
+}
+flag := true
+result := flag || bump()
+result2 := !flag || bump()
+count`,
+		1,
+		t,
+	)
+}
+
+func TestLogicalOperators(t *testing.T) {
+	testEvalBool(`true && true`, true, t)
+	testEvalBool(`true && false`, false, t)
+	testEvalBool(`false || true`, true, t)
+	testEvalBool(`false || false`, false, t)
+	testEvalBool(`true || false && true`, true, t)
+}
+
+func TestLessEqualsGreaterEquals(t *testing.T) {
+	testEvalBool(`5 <= 5`, true, t)
+	testEvalBool(`5 <= 4`, false, t)
+	testEvalBool(`5 >= 5`, true, t)
+	testEvalBool(`4 >= 5`, false, t)
+	testEvalBool(`REAL(1) <= REAL(2)`, true, t)
+	testEvalBool(`REAL(2) >= REAL(3)`, false, t)
+}

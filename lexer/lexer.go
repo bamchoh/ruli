@@ -64,10 +64,40 @@ func (l *Lexer) NextToken() Token {
 		}
 
 	case '<':
-		tok = l.newToken(LT, "<")
+		if l.peekChar() == '=' {
+			ch := l.ch
+			l.readChar()
+			tok = l.newToken(LE, string(ch)+string(l.ch))
+		} else {
+			tok = l.newToken(LT, "<")
+		}
 
 	case '>':
-		tok = l.newToken(GT, ">")
+		if l.peekChar() == '=' {
+			ch := l.ch
+			l.readChar()
+			tok = l.newToken(GE, string(ch)+string(l.ch))
+		} else {
+			tok = l.newToken(GT, ">")
+		}
+
+	case '&':
+		if l.peekChar() == '&' {
+			ch := l.ch
+			l.readChar()
+			tok = l.newToken(AND, string(ch)+string(l.ch))
+		} else {
+			tok = l.newToken(ILLEGAL, "&")
+		}
+
+	case '|':
+		if l.peekChar() == '|' {
+			ch := l.ch
+			l.readChar()
+			tok = l.newToken(OR, string(ch)+string(l.ch))
+		} else {
+			tok = l.newToken(ILLEGAL, "|")
+		}
 
 	case '+':
 		if l.peekChar() == '+' {

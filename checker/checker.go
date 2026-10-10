@@ -879,6 +879,36 @@ func (c *Checker) checkExpr(expr ast.Expression, env *Env) *Type {
 	case *ast.CallExpression:
 		return c.checkCall(e, env)
 
+	case *ast.LogicalExpression:
+		lt := c.checkExpr(e.Left, env)
+		rt := c.checkExpr(e.Right, env)
+		if lt == nil || rt == nil {
+			return nil
+		}
+
+		for i, t := range []*Type{lt, rt} {
+			// 型不明は通す (未指定引数など)
+			if t.Name == ANY_TYPE.Name || t.Name == UNKNOWN_TYPE.Name {
+				continue
+			}
+			if t.Name != BOOL_TYPE.Name {
+				operand := "left"
+				if i == 1 {
+					operand = "right"
+				}
+				c.errAt(
+					e.GetToken(),
+					"operand of %s must be BOOL, got %s (%s)",
+					e.Operator,
+					t.String(),
+					operand,
+				)
+				return nil
+			}
+		}
+
+		return BOOL_TYPE
+
 	case *ast.PrefixExpression:
 		rt := c.checkExpr(e.Right, env)
 		if rt == nil {
@@ -969,11 +999,12 @@ func (c *Checker) checkOperation(lt *Type, operator string, rt *Type, token lexe
 			return lt
 		}
 
-	case "<", ">":
+	case "<", ">", "<=", ">=":
 		if !lt.Equal(rt) {
 			break
 		}
-		if isNumeric(lt) || lt.Name == STRING_TYPE.Name {
+		// SPEC 11: 文字列の < > 比較は非対応
+		if isNumeric(lt) {
 			return BOOL_TYPE
 		}
 
