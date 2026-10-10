@@ -323,7 +323,8 @@ func (p *Parser) parseVarDeclStatement() *ast.VarDeclStatement {
 
 		stmt.Type = p.parseType()
 
-		if stmt.Type == nil {
+		// parseType が独自のエラーメッセージを出す場合 (ref の誤用など) は追記しない
+		if stmt.Type == nil && p.curToken.Type != lexer.REF {
 			p.errorAt(p.curToken, "unknown type '%s'", tokenLabel(p.curToken))
 		}
 
@@ -343,6 +344,11 @@ func (p *Parser) parseVarDeclStatement() *ast.VarDeclStatement {
 func (p *Parser) parseType() ast.TypeNode {
 
 	switch p.curToken.Type {
+
+	case lexer.REF:
+		// ref はパラメータの型の一部でのみ有効 (SPEC 5.5)
+		p.errorAt(p.curToken, "ref is only allowed in function parameters")
+		return nil
 
 	case lexer.INT:
 		return &ast.BasicType{Token: p.curToken, Name: "INT"}
@@ -1014,25 +1020,37 @@ func (p *Parser) parseFunctionParameters() []ast.Parameter {
 	}
 
 	for {
-		// ref 修飾子 (SPEC 8.1 / IEC VAR_IN_OUT): func f(ref m: Motor)
-		p.nextToken() // param name (または ref)
-		isRef := p.curToken.Type == lexer.REF
-		if isRef {
-			p.nextToken() // param name
-		}
+		p.nextToken() // param name
 
 		param := ast.Parameter{
 			Name: p.curToken.Literal,
-			Ref:  isRef,
 		}
 
-		if p.peekToken.Type == lexer.COLON {
-			p.nextToken() // :
-			p.nextToken() // type
-			param.Type = p.parseType()
-			if param.Type == nil {
-				p.errorAt(p.curToken, "unknown type '%s'", tokenLabel(p.curToken))
+		// パラメータは必ず型付き (SPEC 5.1)
+		if p.peekToken.Type != lexer.COLON {
+			p.errorAtPeek("parameter '%s' requires a type", param.Name)
+			return params
+		}
+
+		p.nextToken() // colon
+		p.nextToken() // type first token (または ref)
+
+		if p.curToken.Type == lexer.REF {
+			// ref はパラメータ型の一部 (SPEC 5.5 / IEC VAR_IN_OUT): m: ref Motor
+			p.nextToken() // type first token
+
+			if p.curToken.Type == lexer.COMMA || p.curToken.Type == lexer.RPAREN ||
+				p.curToken.Type == lexer.EOF {
+				p.errorAt(p.curToken, "ref parameter requires a type")
+				return params
 			}
+
+			param.Ref = true
+		}
+
+		param.Type = p.parseType()
+		if param.Type == nil {
+			p.errorAt(p.curToken, "unknown type '%s'", tokenLabel(p.curToken))
 		}
 
 		params = append(params, param)

@@ -685,25 +685,21 @@ func TestCheckRefValid(t *testing.T) {
 
 m : Motor
 
-func stop(ref m: Motor) BOOL {
+func stop(m: ref Motor) BOOL {
 	m.speed = 0
 	return true
 }
 stop(m)
 
-func stop2(ref m) BOOL {
-	m.speed = 0
-	return true
-}
 
 nums := [1, 2, 3]
-func zero(ref a) BOOL {
+func zero(a: ref [3]INT) BOOL {
 	a[0] = 0
 	return true
 }
 zero(nums)
 
-func addTen(ref n: INT) BOOL {
+func addTen(n: ref INT) BOOL {
 	n += 10
 	return true
 }
@@ -717,7 +713,7 @@ addTen(x)`
 func TestCheckRefArgMustBeVariable(t *testing.T) {
 	// ref 引数は代入可能な変数のみ (IEC の IN_OUT)
 	testCheckErrors(
-		`func f(ref n: INT) BOOL {
+		`func f(n: ref INT) BOOL {
 	return true
 }
 f(1)`,
@@ -725,7 +721,7 @@ f(1)`,
 		t,
 	)
 	testCheckErrors(
-		`func f(ref n: INT) BOOL {
+		`func f(n: ref INT) BOOL {
 	return true
 }
 f(1 + 2)`,
@@ -740,7 +736,7 @@ func TestCheckRefArgType(t *testing.T) {
 	s: INT
 }
 
-func f(ref m: M) BOOL {
+func f(m: ref M) BOOL {
 	return true
 }
 

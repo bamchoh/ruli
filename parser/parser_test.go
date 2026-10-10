@@ -1151,7 +1151,7 @@ func TestDistinctTypeParse(t *testing.T) {
 }
 
 func TestRefParameterParse(t *testing.T) {
-	l := lexer.New(`func f(ref m: Motor, ref a, plain: INT) BOOL { return true }`)
+	l := lexer.New(`func f(m: ref Motor, plain: INT) BOOL { return true }`)
 	p := New(l)
 	program := p.ParseProgram()
 	if len(p.Errors()) != 0 {
@@ -1159,16 +1159,48 @@ func TestRefParameterParse(t *testing.T) {
 	}
 
 	fn := program.Statements[0].(*ast.FunctionStatement)
-	if len(fn.Parameters) != 3 {
-		t.Fatalf("Parameters does not contain 3. got=%d", len(fn.Parameters))
+	if len(fn.Parameters) != 2 {
+		t.Fatalf("Parameters does not contain 2. got=%d", len(fn.Parameters))
 	}
 	if !fn.Parameters[0].Ref || fn.Parameters[0].Name != "m" {
-		t.Fatalf("Parameters[0] not ref m. got=%+v", fn.Parameters[0])
+		t.Fatalf("Parameters[0] not m: ref. got=%+v", fn.Parameters[0])
 	}
-	if !fn.Parameters[1].Ref || fn.Parameters[1].Type != nil {
-		t.Fatalf("Parameters[1] not untyped ref. got=%+v", fn.Parameters[1])
+	if fn.Parameters[0].Type.String() != "Motor" {
+		t.Fatalf("Parameters[0] type not Motor. got=%s", fn.Parameters[0].Type.String())
 	}
-	if fn.Parameters[2].Ref {
-		t.Fatalf("Parameters[2] must not be ref")
+	if fn.Parameters[1].Ref {
+		t.Fatalf("Parameters[1] must not be ref")
 	}
+}
+
+func TestParameterRequiresType(t *testing.T) {
+	// パラメータの型は必須 (SPEC 5.1)。エラー復帰を持たないためカスケードする
+	testParseErrors(
+		`func f(a) BOOL { return true }`,
+		[]string{
+			"parameter 'a' requires a type",
+			"expected '{', got ')'",
+			"unexpected token ')'",
+			"unexpected token '{'",
+			"unexpected token '}'",
+		},
+		t,
+	)
+}
+
+func TestRefParameterRequiresType(t *testing.T) {
+	testParseErrors(
+		`func f(a: ref) BOOL { return true }`,
+		[]string{"ref parameter requires a type"},
+		t,
+	)
+}
+
+func TestRefOnlyInParameters(t *testing.T) {
+	// ref はパラメータ型の一部でのみ有効 (SPEC 5.5)
+	testParseErrors(
+		`x : ref INT`,
+		[]string{"ref is only allowed in function parameters"},
+		t,
+	)
 }

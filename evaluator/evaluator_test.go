@@ -240,7 +240,7 @@ a[0]`,
 func TestArrayCopyOnFunctionArg(t *testing.T) {
 	// SPEC 5.2: 引数は完全値渡し
 	testEvalInteger(
-		`func f(x) INT {
+		`func f(x: [3]INT) INT {
 	x[0] = 99
 	return x[0]
 }
@@ -339,7 +339,7 @@ func TestStructCopyOnFunctionArg(t *testing.T) {
 	speed: INT
 }
 
-func set(x) INT {
+func set(x: Motor) INT {
 	x.speed = 99
 	return x.speed
 }
@@ -739,7 +739,7 @@ func TestRefStructPropagates(t *testing.T) {
 	speed: INT
 }
 
-func stop(ref m: Motor) BOOL {
+func stop(m: ref Motor) BOOL {
 	m.speed = 0
 	return true
 }
@@ -756,7 +756,7 @@ m.speed`,
 func TestRefArrayPropagates(t *testing.T) {
 	testEvalInteger(
 		`buf := [7, 8, 9]
-func zero(ref a) BOOL {
+func zero(a: ref [3]INT) BOOL {
 	a[0] = 0
 	return true
 }
@@ -770,7 +770,7 @@ buf[0]`,
 func TestRefScalarWriteBack(t *testing.T) {
 	// スカラー ref は終了時に書き戻される (VAR_IN_OUT)
 	testEvalInteger(
-		`func addTen(ref n: INT) BOOL {
+		`func addTen(n: ref INT) BOOL {
 	n += 10
 	return true
 }
@@ -781,7 +781,7 @@ x`,
 		t,
 	)
 	testEvalInteger(
-		`func bump(ref n: INT) BOOL {
+		`func bump(n: ref INT) BOOL {
 	n++
 	return true
 }
