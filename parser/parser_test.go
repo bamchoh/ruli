@@ -1181,7 +1181,7 @@ func TestParameterRequiresType(t *testing.T) {
 			"parameter 'a' requires a type",
 			"expected '{', got ')'",
 			"unexpected token ')'",
-			"unexpected token '{'",
+			"expected ':', got 'true'",
 			"unexpected token '}'",
 		},
 		t,
@@ -1227,10 +1227,83 @@ func TestRealLiteralParse(t *testing.T) {
 }
 
 func TestRealLiteralNoTrailingDot(t *testing.T) {
-	// 小数点の後には数字が必要
+	// 小数点の後には数字が必要 (. は postfix のフィールドアクセスとして解析される)
 	testParseErrors(
 		`x := 3.`,
-		[]string{"unexpected token '.'"},
+		[]string{"expected field name, got 'EOF'"},
 		t,
 	)
+}
+
+func TestStructLiteralParse(t *testing.T) {
+	l := lexer.New(`m : Motor = Motor{speed: 10, enable: true}`)
+	p := New(l)
+	program := p.ParseProgram()
+	if len(p.Errors()) != 0 {
+		t.Fatalf("unexpected parse errors: %v", p.Errors())
+	}
+	if len(program.Statements) != 1 {
+		t.Fatalf("program.Statements does not contain 1 statement. got=%d", len(program.Statements))
+	}
+
+	decl := program.Statements[0].(*ast.VarDeclStatement)
+	lit, ok := decl.Value.(*ast.StructLiteral)
+	if !ok {
+		t.Fatalf("Value not *ast.StructLiteral. got=%T", decl.Value)
+	}
+	if lit.Name != "Motor" {
+		t.Fatalf("lit.Name not Motor. got=%s", lit.Name)
+	}
+	if len(lit.Fields) != 2 || lit.Fields[0].Name != "speed" || lit.Fields[1].Name != "enable" {
+		t.Fatalf("fields not as expected")
+	}
+	if !testLiteralExpression(t, lit.Fields[0].Value, 10) {
+		t.Fatalf("field value not as expected")
+	}
+}
+
+func TestEmptyStructLiteralParse(t *testing.T) {
+	l := lexer.New(`m := Motor{}`)
+	p := New(l)
+	program := p.ParseProgram()
+	if len(p.Errors()) != 0 {
+		t.Fatalf("unexpected parse errors: %v", p.Errors())
+	}
+
+	decl := program.Statements[0].(*ast.VarDeclStatement)
+	lit, ok := decl.Value.(*ast.StructLiteral)
+	if !ok || len(lit.Fields) != 0 {
+		t.Fatalf("empty literal not as expected. got=%T", decl.Value)
+	}
+}
+
+func TestStructLiteralForbiddenInCondition(t *testing.T) {
+	// Go と同じ規則: 条件部の struct リテラルは括弧で括る
+	l := lexer.New(`if flag { x := 1 }`)
+	p := New(l)
+	program := p.ParseProgram()
+	if len(p.Errors()) != 0 {
+		t.Fatalf("unexpected parse errors: %v", p.Errors())
+	}
+	if len(program.Statements) != 1 {
+		t.Fatalf("program.Statements does not contain 1 statement. got=%d", len(program.Statements))
+	}
+	if _, ok := program.Statements[0].(*ast.IfStatement); !ok {
+		t.Fatalf("stmt not *ast.IfStatement. got=%T", program.Statements[0])
+	}
+}
+
+func TestStructLiteralInParenthesizedCondition(t *testing.T) {
+	l := lexer.New(`if (m.speed) > 0 { print(1) }`)
+	p := New(l)
+	program := p.ParseProgram()
+	if len(p.Errors()) != 0 {
+		t.Fatalf("unexpected parse errors: %v", p.Errors())
+	}
+	if len(program.Statements) != 1 {
+		t.Fatalf("program.Statements does not contain 1 statement. got=%d", len(program.Statements))
+	}
+	if _, ok := program.Statements[0].(*ast.IfStatement); !ok {
+		t.Fatalf("stmt not *ast.IfStatement. got=%T", program.Statements[0])
+	}
 }

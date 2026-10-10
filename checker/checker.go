@@ -896,6 +896,9 @@ func (c *Checker) checkExpr(expr ast.Expression, env *Env) *Type {
 	case *ast.CastExpression:
 		return c.checkCast(e, env)
 
+	case *ast.StructLiteral:
+		return c.checkStructLiteral(e, env)
+
 	case *ast.CallExpression:
 		return c.checkCall(e, env)
 
@@ -1131,6 +1134,52 @@ func (c *Checker) checkCall(e *ast.CallExpression, env *Env) *Type {
 	default:
 		return &Type{Name: MULTI_TYPE.Name, Returns: fnType.Returns}
 	}
+}
+
+// checkStructLiteral は Motor{speed: 10} を検査する。
+// 未指定フィールドはゼロ値で埋まる (Go 同様)
+func (c *Checker) checkStructLiteral(e *ast.StructLiteral, env *Env) *Type {
+	st := c.resolveTypeNode(&ast.BasicType{Token: e.Token, Name: e.Name})
+	if st == nil {
+		return nil
+	}
+
+	if st.Name != STRUCT_TYPE.Name {
+		c.errAt(e.GetToken(), "%s is not a struct", e.Name)
+		return nil
+	}
+
+	seen := make(map[string]bool, len(e.Fields))
+
+	for _, field := range e.Fields {
+		ft, ok := st.Fields[field.Name]
+		if !ok {
+			c.errAt(field.Value.GetToken(), "undefined field: %s", field.Name)
+			continue
+		}
+
+		if seen[field.Name] {
+			c.errAt(field.Value.GetToken(), "duplicate field: %s", field.Name)
+			continue
+		}
+		seen[field.Name] = true
+
+		// 固定幅フィールドへのリテラルは範囲を静的に検査する
+		c.checkLiteralRange(ft.Name, field.Value)
+
+		vt := c.checkExpr(field.Value, env)
+		if vt != nil && !ft.Equal(vt) {
+			c.errAt(
+				field.Value.GetToken(),
+				"type mismatch: %s %s %s",
+				ft.String(),
+				":",
+				vt.String(),
+			)
+		}
+	}
+
+	return st
 }
 
 // checkCast は REAL(a) のような明示的キャストを検査する (SPEC 6.3)

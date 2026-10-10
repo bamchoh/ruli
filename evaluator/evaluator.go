@@ -179,6 +179,9 @@ func Eval(node ast.Node, env *object.Environment) object.Object {
 	case *ast.CallExpression:
 		return evalCallExpression(node, env)
 
+	case *ast.StructLiteral:
+		return evalStructLiteral(node, env)
+
 	case *ast.CastExpression:
 		val := Eval(node.Value, env)
 		if isError(val) {
@@ -897,6 +900,41 @@ func evalCastTo(
 	}
 
 	return newErrorAtNode(node, "invalid cast: %s to %s", val.Type(), targetName)
+}
+
+// evalStructLiteral は Motor{speed: 10} を実行する。
+// 未指定フィールドはゼロ値で埋まる (Go 同様)
+func evalStructLiteral(
+	node *ast.StructLiteral,
+	env *object.Environment,
+) object.Object {
+
+	def, ok := env.GetTypeDef(node.Name)
+	if !ok || def.Base != "" {
+		return newErrorAtNode(node, "undefined struct type: %s", node.Name)
+	}
+
+	// ゼロ値の struct から始めて、指定フィールドを上書きする
+	zero := zeroValue(env, node.Name)
+	s, ok := zero.(*object.Struct)
+	if !ok {
+		return newErrorAtNode(node, "undefined struct type: %s", node.Name)
+	}
+
+	for _, field := range node.Fields {
+		if _, ok := s.Fields[field.Name]; !ok {
+			return newErrorAtNode(field.Value, "undefined field: %s", field.Name)
+		}
+
+		val := Eval(field.Value, env)
+		if isError(val) {
+			return val
+		}
+
+		s.Fields[field.Name] = bindValue(val)
+	}
+
+	return s
 }
 
 // evalSelectorExpression は m.speed のようなフィールド読み出し

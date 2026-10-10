@@ -774,3 +774,54 @@ func TestCheckRealLiteralMixed(t *testing.T) {
 		t,
 	)
 }
+
+func TestCheckStructLiteralValid(t *testing.T) {
+	input := `type Motor struct {
+	speed: INT
+	enable: BOOL
+}
+type Conf struct {
+	gain: REAL
+}
+
+m : Motor = Motor{speed: 10, enable: true}
+m2 := Motor{speed: 5}
+m3 := Motor{}
+c := Conf{gain: 0.75}`
+	if errs := Check(parseInput(input)); len(errs) > 0 {
+		t.Fatalf("unexpected errors: %v", errs)
+	}
+}
+
+func TestCheckStructLiteralErrors(t *testing.T) {
+	base := `type Motor struct {
+	speed: SINT
+}
+
+`
+	testCheckErrors(
+		base+`m := Motor{nope: 1}`,
+		[]string{"undefined field: nope"},
+		t,
+	)
+	testCheckErrors(
+		base+`m := Motor{speed: 300}`,
+		[]string{"value 300 out of range for SINT (-128..127)"},
+		t,
+	)
+	testCheckErrors(
+		base+`m := Motor{speed: true}`,
+		[]string{"type mismatch: SINT : BOOL"},
+		t,
+	)
+	testCheckErrors(
+		base+`m := Motor{speed: 1, speed: 2}`,
+		[]string{"duplicate field: speed"},
+		t,
+	)
+	testCheckErrors(
+		`m := Nope{x: 1}`,
+		[]string{"unknown type: Nope"},
+		t,
+	)
+}

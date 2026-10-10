@@ -577,6 +577,39 @@ func (ie *IndexExpression) GetToken() lexer.Token {
 	return ie.Token
 }
 
+// StructLiteralField は構造体リテラルの 1 フィールド
+type StructLiteralField struct {
+	Name  string
+	Value Expression
+}
+
+// StructLiteral は Motor{speed: 10, enable: true} のような構造体リテラル。
+// 未指定フィールドはゼロ値で埋まる
+type StructLiteral struct {
+	Token  lexer.Token
+	Name   string // 構造体型名
+	Fields []StructLiteralField
+}
+
+func (sl *StructLiteral) expressionNode() {}
+
+func (sl *StructLiteral) String() string {
+	var out strings.Builder
+	out.WriteString(sl.Name + "{")
+	for i, f := range sl.Fields {
+		if i > 0 {
+			out.WriteString(", ")
+		}
+		out.WriteString(f.Name + ": " + f.Value.String())
+	}
+	out.WriteString("}")
+	return out.String()
+}
+
+func (sl *StructLiteral) GetToken() lexer.Token {
+	return sl.Token
+}
+
 // SelectorExpression は m.speed のようなフィールドアクセス
 type SelectorExpression struct {
 	Token  lexer.Token

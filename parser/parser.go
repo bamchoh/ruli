@@ -35,6 +35,7 @@ var precedences = map[lexer.TokenType]int{
 	lexer.MOD:      PRODUCT,
 	lexer.LPAREN:   CALL,
 	lexer.LBRACKET: INDEX,
+	lexer.DOT:      INDEX,
 }
 
 type (
@@ -64,6 +65,11 @@ type Parser struct {
 	infixParseFns  map[lexer.TokenType]infixParseFn
 
 	errors []ParseError
+
+	// struct リテラル (ident{...}) の許可。
+	// if / for の条件部・switch の値では `if flag { }` との曖昧性を避けるため
+	// 一時的に無効化する (Go と同じ規則。括弧内なら有効)
+	allowStructLiteral bool
 }
 
 // Errors はパース中に記録されたエラーを返す
@@ -73,9 +79,10 @@ func (p *Parser) Errors() []ParseError {
 
 func New(l *lexer.Lexer) *Parser {
 	p := &Parser{
-		l:              l,
-		prefixParseFns: make(map[lexer.TokenType]prefixParseFn),
-		infixParseFns:  make(map[lexer.TokenType]infixParseFn),
+		l:                  l,
+		prefixParseFns:     make(map[lexer.TokenType]prefixParseFn),
+		infixParseFns:      make(map[lexer.TokenType]infixParseFn),
+		allowStructLiteral: true,
 	}
 
 	p.registerPrefix(lexer.INT_LIT, p.parseIntegerLiteral)
@@ -104,6 +111,7 @@ func New(l *lexer.Lexer) *Parser {
 	p.registerInfix(lexer.OR, p.parseLogicalExpression)
 	p.registerInfix(lexer.LPAREN, p.parseCallExpression)
 	p.registerInfix(lexer.LBRACKET, p.parseIndexExpression)
+	p.registerInfix(lexer.DOT, p.parseDotSelector)
 
 	p.nextToken()
 	p.nextToken()
@@ -497,37 +505,77 @@ func (p *Parser) parseIdentifier() ast.Expression {
 		Value: p.curToken.Literal,
 	}
 
-	if p.peekToken.Type == lexer.DOT {
-		// フィールドアクセス: m.speed
-		return p.parseSelector(ident)
+	if p.allowStructLiteral && p.peekToken.Type == lexer.LBRACE {
+		// 構造体リテラル: Motor{speed: 10}
+		return p.parseStructLiteral(ident)
 	}
 
 	return ident
 }
 
-// parseSelector は m.a.b のようなドット連鎖をパースする
-func (p *Parser) parseSelector(left ast.Expression) ast.Expression {
-	p.nextToken() // .
-	p.nextToken() // first field name
+// parseDotSelector はフィールドアクセスの postfix (.field) をパースする。
+// m.speed だけでなく Motor{...}.speed や f(x).y にも有効
+func (p *Parser) parseDotSelector(left ast.Expression) ast.Expression {
+	p.nextToken() // field name
 
-	exp := &ast.SelectorExpression{
+	if p.curToken.Type != lexer.IDENT {
+		p.errorAt(p.curToken, "expected field name, got '%s'", tokenLabel(p.curToken))
+		return left
+	}
+
+	return &ast.SelectorExpression{
 		Token:  left.GetToken(),
 		Object: left,
 		Field:  p.curToken.Literal,
 	}
+}
 
-	for p.peekToken.Type == lexer.DOT {
-		p.nextToken() // .
-		p.nextToken() // next field name
+// parseStructLiteral は Motor{speed: 10, enable: true} をパースする。
+// 未指定フィールドはゼロ値、区切りは , または ;
+func (p *Parser) parseStructLiteral(ident *ast.Identifier) ast.Expression {
+	lit := &ast.StructLiteral{
+		Token: ident.Token,
+		Name:  ident.Value,
+	}
 
-		exp = &ast.SelectorExpression{
-			Token:  exp.GetToken(),
-			Object: exp,
-			Field:  p.curToken.Literal,
+	p.nextToken() // {
+	p.nextToken() // first field (or })
+
+	for p.curToken.Type != lexer.RBRACE && p.curToken.Type != lexer.EOF {
+		fieldName := p.curToken.Literal
+
+		if !p.expectPeek(lexer.COLON) {
+			return lit
+		}
+
+		p.nextToken() // :
+		p.nextToken() // value first token
+
+		value := p.parseExpression(LOWEST)
+
+		lit.Fields = append(lit.Fields, ast.StructLiteralField{
+			Name:  fieldName,
+			Value: value,
+		})
+
+		// 区切り: , / ; で次のフィールド、} で終了
+		switch p.peekToken.Type {
+		case lexer.COMMA, lexer.SEMICOLON:
+			p.nextToken() // separator
+			p.nextToken() // next field name
+		case lexer.RBRACE:
+			p.nextToken() // }
+		default:
+			p.errorAtPeek("expected ',' or '}', got '%s'", tokenLabel(p.peekToken))
+			return lit
 		}
 	}
 
-	return exp
+	if p.curToken.Type == lexer.EOF {
+		p.errorAt(p.curToken, "expected '}', got EOF")
+	}
+
+	return lit
 }
 
 func (p *Parser) parseCast() ast.Expression {
@@ -550,11 +598,17 @@ func (p *Parser) parseCast() ast.Expression {
 	}
 }
 
-// parseParenthesized は ( expr ) をパースする
+// parseParenthesized は ( expr ) をパースする。
+// 条件部で struct リテラルを書きたい場合は括弧で括る (Go と同じ規則)
 func (p *Parser) parseParenthesized() ast.Expression {
+	prev := p.allowStructLiteral
+	p.allowStructLiteral = true
+
 	p.nextToken() // expr first token
 
 	exp := p.parseExpression(LOWEST)
+
+	p.allowStructLiteral = prev
 
 	if p.expectPeek(lexer.RPAREN) {
 		p.nextToken() // consume )
@@ -636,9 +690,15 @@ func (p *Parser) parseIfStatement() *ast.IfStatement {
 		Token: p.curToken,
 	}
 
+	// 条件部では struct リテラルを禁止 (if flag { } との曖昧性の解消)
+	prev := p.allowStructLiteral
+	p.allowStructLiteral = false
+
 	p.nextToken() // condition first token
 
 	stmt.Condition = p.parseExpression(LOWEST)
+
+	p.allowStructLiteral = prev
 
 	if !p.expectPeek(lexer.LBRACE) {
 		return stmt
@@ -727,7 +787,12 @@ func (p *Parser) parseForStatement() *ast.ForStatement {
 
 	p.nextToken() // ;
 	p.nextToken() // condition first token
+
+	// for 条件部でも struct リテラルを禁止 (ブロック {} との曖昧性の解消)
+	prev := p.allowStructLiteral
+	p.allowStructLiteral = false
 	stmt.Condition = p.parseExpression(LOWEST)
+	p.allowStructLiteral = prev
 
 	if !p.expectPeek(lexer.SEMICOLON) {
 		return stmt
@@ -849,7 +914,12 @@ func (p *Parser) parseSwitchStatement() *ast.SwitchStatement {
 	}
 
 	p.nextToken() // value first token
+
+	// switch 値でも struct リテラルを禁止 (case ブロック {} との曖昧性の解消)
+	prev := p.allowStructLiteral
+	p.allowStructLiteral = false
 	stmt.Value = p.parseExpression(LOWEST)
+	p.allowStructLiteral = prev
 
 	if !p.expectPeek(lexer.LBRACE) {
 		return stmt

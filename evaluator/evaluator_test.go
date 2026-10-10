@@ -827,3 +827,73 @@ func TestRealLiterals(t *testing.T) {
 		t,
 	)
 }
+
+func TestStructLiteralRuntime(t *testing.T) {
+	testEvalInteger(
+		`type Motor struct {
+	speed: INT
+	enable: BOOL
+}
+
+m : Motor = Motor{speed: 10, enable: true}
+m.speed`,
+		10,
+		t,
+	)
+	testEvalBool(
+		`type Motor struct {
+	speed: INT
+	enable: BOOL
+}
+
+m2 := Motor{speed: 5}
+m2.enable`,
+		false,
+		t,
+	)
+	// 空リテラルはゼロ値の struct
+	testEvalInteger(
+		`type Motor struct {
+	speed: INT
+	enable: BOOL
+}
+
+m3 := Motor{}
+m3.speed`,
+		0,
+		t,
+	)
+	// リテラルでも値渡し (コピー)
+	testEvalInteger(
+		`type Motor struct {
+	speed: INT
+	enable: BOOL
+}
+
+m := Motor{speed: 10, enable: true}
+n := m
+n.speed = 99
+m.speed`,
+		10,
+		t,
+	)
+}
+
+func TestStructLiteralRuntimeErrors(t *testing.T) {
+	testEvalError(
+		`type Motor struct {
+	speed: INT
+	enable: BOOL
+}
+
+m := Motor{nope: 1}
+m.speed`,
+		"undefined field: nope",
+		t,
+	)
+	testEvalError(
+		`m := Nope{x: 1}`,
+		"undefined struct type: Nope",
+		t,
+	)
+}
