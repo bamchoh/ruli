@@ -200,7 +200,12 @@ func (l *Lexer) NextToken() Token {
 			tok = l.newToken(tok.Type, lit)
 			return tok
 		} else if isDigit(l.ch) {
-			return l.newToken(INT_LIT, l.readNumber())
+			lit := l.readNumber()
+			if strings.ContainsRune(lit, '.') {
+				// 実数リテラル (SPEC 4.1 の REAL / LREAL)
+				return l.newToken(REAL_LIT, lit)
+			}
+			return l.newToken(INT_LIT, lit)
 		} else {
 			tok = l.newToken(ILLEGAL, string(l.ch))
 		}
@@ -265,6 +270,15 @@ func (l *Lexer) readNumber() string {
 
 	for isDigit(l.ch) {
 		l.readChar()
+	}
+
+	// 実数リテラル: 小数点の後に数字が必要 (3.5)。buf[0].field などの
+	// セレクタの `.` と区別するため、数字が続く場合のみ実数とみなす
+	if l.ch == '.' && isDigit(l.peekChar()) {
+		l.readChar()
+		for isDigit(l.ch) {
+			l.readChar()
+		}
 	}
 
 	return string(l.input[start:l.position])

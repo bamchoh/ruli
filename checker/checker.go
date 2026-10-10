@@ -804,6 +804,9 @@ func (c *Checker) checkExpr(expr ast.Expression, env *Env) *Type {
 	case *ast.IntegerLiteral:
 		return INT_TYPE
 
+	case *ast.RealLiteral:
+		return REAL_TYPE
+
 	case *ast.BooleanLiteral:
 		return BOOL_TYPE
 

@@ -165,3 +165,35 @@ func TestLogicalAndComparisonTokens(t *testing.T) {
 		}
 	}
 }
+
+func TestRealLiteralTokens(t *testing.T) {
+	// 実数リテラルとセレクタの区別
+	input := "1.5 0.75 10 buf[0].field x.y"
+	l := New(input)
+	tests := []struct {
+		expectedType    TokenType
+		expectedLiteral string
+	}{
+		{REAL_LIT, "1.5"},
+		{REAL_LIT, "0.75"},
+		{INT_LIT, "10"},
+		{IDENT, "buf"},
+		{LBRACKET, "["},
+		{INT_LIT, "0"},
+		{RBRACKET, "]"},
+		{DOT, "."},
+		{IDENT, "field"},
+		{IDENT, "x"},
+		{DOT, "."},
+		{IDENT, "y"},
+		{EOF, ""},
+	}
+
+	for i, tt := range tests {
+		tok := l.NextToken()
+		if tok.Type != tt.expectedType || tok.Literal != tt.expectedLiteral {
+			t.Fatalf("tests[%d] wrong. expected=%q(%q) got=%q(%q)",
+				i, tt.expectedType, tt.expectedLiteral, tok.Type, tok.Literal)
+		}
+	}
+}

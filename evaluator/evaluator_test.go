@@ -812,3 +812,18 @@ m.speed`,
 		t,
 	)
 }
+
+func TestRealLiterals(t *testing.T) {
+	testEvalReal(`2.5 + 2.0`, 4.5, t)
+	testEvalReal(`-0.75`, -0.75, t)
+	testEvalReal(`2.5 / 5.0`, 0.5, t)
+	testEvalBool(`3.5 < 2.0`, false, t)
+	testEvalBool(`1.5 <= 1.5`, true, t)
+	testEvalInteger(`DINT(2.9)`, 2, t)
+	// ランタイムの型名はオブジェクト型で出る (静的検査では INT)
+	testEvalError(
+		`x := 1.5 + 2`,
+		"type mismatch: REAL + INTEGER",
+		t,
+	)
+}

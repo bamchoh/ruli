@@ -79,6 +79,7 @@ func New(l *lexer.Lexer) *Parser {
 	}
 
 	p.registerPrefix(lexer.INT_LIT, p.parseIntegerLiteral)
+	p.registerPrefix(lexer.REAL_LIT, p.parseRealLiteral)
 	p.registerPrefix(lexer.IDENT, p.parseIdentifier)
 	p.registerPrefix(lexer.STRING_LIT, p.parseStringLiteral)
 	p.registerPrefix(lexer.LBRACKET, p.parseArrayLiteral)
@@ -449,6 +450,18 @@ func (p *Parser) parseIntegerLiteral() ast.Expression {
 	return &ast.IntegerLiteral{
 		Token: p.curToken,
 		Value: int(value),
+	}
+}
+
+func (p *Parser) parseRealLiteral() ast.Expression {
+	value, err := strconv.ParseFloat(p.curToken.Literal, 64)
+	if err != nil {
+		p.errorAt(p.curToken, "invalid real literal '%s'", p.curToken.Literal)
+		return nil
+	}
+	return &ast.RealLiteral{
+		Token: p.curToken,
+		Value: value,
 	}
 }
 

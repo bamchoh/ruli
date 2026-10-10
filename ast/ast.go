@@ -170,6 +170,22 @@ func (le *LogicalExpression) GetToken() lexer.Token {
 	return le.Token
 }
 
+// RealLiteral は 3.5 のような実数リテラル (SPEC 4.1 の REAL / LREAL)
+type RealLiteral struct {
+	Token lexer.Token
+	Value float64
+}
+
+func (rl *RealLiteral) expressionNode() {}
+
+func (rl *RealLiteral) String() string {
+	return fmt.Sprintf("%g", rl.Value)
+}
+
+func (rl *RealLiteral) GetToken() lexer.Token {
+	return rl.Token
+}
+
 // CastExpression は REAL(a) のような明示的キャスト (SPEC 6.3)
 type CastExpression struct {
 	Token lexer.Token

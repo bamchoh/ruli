@@ -16,8 +16,9 @@ const (
 	ILLEGAL = "ILLEGAL"
 
 	// identifiers + literals
-	IDENT   = "IDENT"
-	INT_LIT = "INT_LIT"
+	IDENT    = "IDENT"
+	INT_LIT  = "INT_LIT"
+	REAL_LIT = "REAL_LIT"
 
 	// operators
 	COLON   = ":"

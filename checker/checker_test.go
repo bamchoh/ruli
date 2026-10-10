@@ -746,3 +746,31 @@ f(y)`,
 		t,
 	)
 }
+
+func TestCheckRealLiteral(t *testing.T) {
+	for _, input := range []string{
+		`x := 3.5`,
+		`x : REAL = 1.5`,
+		`x : LREAL = 1.5`,
+		`x := 1.5 + REAL(2)`,
+		`x := 3.5 < 2.0`,
+	} {
+		if errs := Check(parseInput(input)); len(errs) > 0 {
+			t.Fatalf("unexpected errors (%q): %v", input, errs)
+		}
+	}
+}
+
+func TestCheckRealLiteralMixed(t *testing.T) {
+	// SPEC 6.3: 実数リテラルと整数の混在もキャスト必須
+	testCheckErrors(
+		`x := 1.5 + 2`,
+		[]string{"type mismatch: REAL + INT"},
+		t,
+	)
+	testCheckErrors(
+		`x : INT = 1.5`,
+		[]string{"type mismatch: declared INT, got REAL"},
+		t,
+	)
+}

@@ -1204,3 +1204,33 @@ func TestRefOnlyInParameters(t *testing.T) {
 		t,
 	)
 }
+
+func TestRealLiteralParse(t *testing.T) {
+	l := lexer.New(`gain = 0.75`)
+	p := New(l)
+	program := p.ParseProgram()
+	if len(p.Errors()) != 0 {
+		t.Fatalf("unexpected parse errors: %v", p.Errors())
+	}
+	if len(program.Statements) != 1 {
+		t.Fatalf("program.Statements does not contain 1 statement. got=%d", len(program.Statements))
+	}
+
+	assign := program.Statements[0].(*ast.AssignStatement)
+	lit, ok := assign.Value.(*ast.RealLiteral)
+	if !ok {
+		t.Fatalf("Value not *ast.RealLiteral. got=%T", assign.Value)
+	}
+	if lit.Value != 0.75 {
+		t.Fatalf("Value not 0.75. got=%g", lit.Value)
+	}
+}
+
+func TestRealLiteralNoTrailingDot(t *testing.T) {
+	// 小数点の後には数字が必要
+	testParseErrors(
+		`x := 3.`,
+		[]string{"unexpected token '.'"},
+		t,
+	)
+}
