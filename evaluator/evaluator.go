@@ -151,6 +151,9 @@ func Eval(node ast.Node, env *object.Environment) object.Object {
 	case *ast.ForStatement:
 		return evalForStatement(node, env)
 
+	case *ast.SwitchStatement:
+		return evalSwitchStatement(node, env)
+
 	case *ast.CallExpression:
 		return evalCallExpression(node, env)
 
@@ -442,6 +445,65 @@ func nativeBoolToBooleanObject(input bool) *object.Boolean {
 		return TRUE
 	}
 	return FALSE
+}
+
+// evalSwitchStatement は switch 文 (SPEC 7.4) を実行する。fallthrough なし
+func evalSwitchStatement(node *ast.SwitchStatement, env *object.Environment) object.Object {
+
+	val := Eval(node.Value, env)
+	if isError(val) {
+		return val
+	}
+
+	for _, sc := range node.Cases {
+		for _, value := range sc.Values {
+			cv := Eval(value, env)
+			if isError(cv) {
+				return cv
+			}
+
+			if valuesEqual(val, cv) {
+				return evalSwitchCaseBody(sc.Body, env)
+			}
+		}
+	}
+
+	if node.Default != nil {
+		return evalSwitchCaseBody(node.Default.Body, env)
+	}
+
+	return &object.Null{}
+}
+
+// evalSwitchCaseBody は case 本体を実行する。
+// break は switch を抜ける (内側の break はここで消化される)
+func evalSwitchCaseBody(body *ast.BlockStatement, env *object.Environment) object.Object {
+	result := Eval(body, env)
+
+	if result != nil && result.Type() == object.BREAK_OBJ {
+		return &object.Null{}
+	}
+
+	return result // RETURN / CONTINUE は外側へ伝播する
+}
+
+// valuesEqual は switch の一致判定 (型が異なれば不一致)
+func valuesEqual(a, b object.Object) bool {
+	switch x := a.(type) {
+	case *object.Integer:
+		y, ok := b.(*object.Integer)
+		return ok && x.Value == y.Value
+	case *object.Real:
+		y, ok := b.(*object.Real)
+		return ok && x.Value == y.Value
+	case *object.Boolean:
+		y, ok := b.(*object.Boolean)
+		return ok && x.Value == y.Value
+	case *object.String:
+		y, ok := b.(*object.String)
+		return ok && x.Value == y.Value
+	}
+	return false
 }
 
 func evalBlockStatement(block *ast.BlockStatement, env *object.Environment) object.Object {

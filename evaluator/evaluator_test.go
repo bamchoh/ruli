@@ -528,3 +528,97 @@ x : SINT = y * 100`,
 		t,
 	)
 }
+
+func TestSwitchStatement(t *testing.T) {
+	testEvalInteger(
+		`x := 3
+switch x {
+case 1:
+	x = 10
+case 2, 3:
+	x = 20
+default:
+	x = 30
+}
+x`,
+		20,
+		t,
+	)
+}
+
+func TestSwitchDefault(t *testing.T) {
+	testEvalInteger(
+		`x := 99
+switch x {
+case 1:
+	x = 10
+default:
+	x = 30
+}
+x`,
+		30,
+		t,
+	)
+}
+
+func TestSwitchNoMatchNoDefault(t *testing.T) {
+	testEvalInteger(
+		`x := 5
+y := 1
+switch x {
+case 1:
+	y = 10
+}
+y`,
+		1,
+		t,
+	)
+}
+
+func TestSwitchBreakExitsSwitchOnly(t *testing.T) {
+	// break は switch のみ抜け、外側の for は継続する
+	testEvalInteger(
+		`total := 0
+for i := 0; i < 5; i++ {
+	switch i {
+	case 1:
+		break
+	default:
+		total = total + 100
+	}
+	total = total + i
+}
+total`,
+		410,
+		t,
+	)
+}
+
+func TestSwitchReturnPropagates(t *testing.T) {
+	testEvalInteger(
+		`func f(x: INT) INT {
+	switch x {
+	case 5:
+		return 100
+	}
+	return 0
+}
+f(5)`,
+		100,
+		t,
+	)
+}
+
+func TestSwitchCaseScope(t *testing.T) {
+	// case 本体はスコープを持つ
+	testEvalError(
+		`x := 1
+switch x {
+case 1:
+	y := 10
+}
+y`,
+		"identifier not found: y",
+		t,
+	)
+}

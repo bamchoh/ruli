@@ -481,3 +481,50 @@ x := values[5]`,
 		t,
 	)
 }
+
+func TestCheckSwitchValid(t *testing.T) {
+	input := `x := 2
+s := ""
+switch x {
+case 1:
+	s = "one"
+case 2, 3:
+	s = "two"
+default:
+	s = "other"
+}
+switch s {
+case "one":
+	print(1)
+}`
+	if errs := Check(parseInput(input)); len(errs) > 0 {
+		t.Fatalf("unexpected errors: %v", errs)
+	}
+}
+
+func TestCheckSwitchCaseTypeMismatch(t *testing.T) {
+	testCheckErrors(
+		`x := 1
+switch x {
+case true:
+	print(1)
+}`,
+		[]string{"case value type mismatch: expected INT, got BOOL"},
+		t,
+	)
+}
+
+func TestCheckSwitchStructValue(t *testing.T) {
+	testCheckErrors(
+		`type M struct {
+	s: INT
+}
+
+m : M
+switch m {
+case 1:
+}`,
+		[]string{"switch value must be INT, REAL, STRING or BOOL, got STRUCT"},
+		t,
+	)
+}

@@ -185,6 +185,9 @@ func (p *Parser) parseStatement() ast.Statement {
 	case lexer.TYPE:
 		return p.parseTypeDeclStatement()
 
+	case lexer.SWITCH:
+		return p.parseSwitchStatement()
+
 	case lexer.IDENT:
 
 		// 複数代入先: x, ok := f() / x, ok = f()
@@ -767,6 +770,112 @@ func (p *Parser) parseTypeDeclStatement() *ast.TypeDeclStatement {
 	}
 
 	return stmt
+}
+
+// parseSwitchStatement は switch 文 (SPEC 7.4) をパースする。fallthrough なし
+func (p *Parser) parseSwitchStatement() *ast.SwitchStatement {
+	stmt := &ast.SwitchStatement{
+		Token: p.curToken,
+	}
+
+	p.nextToken() // value first token
+	stmt.Value = p.parseExpression(LOWEST)
+
+	if !p.expectPeek(lexer.LBRACE) {
+		return stmt
+	}
+
+	p.nextToken() // {
+	p.nextToken() // case / default / }
+
+	for p.curToken.Type != lexer.RBRACE && p.curToken.Type != lexer.EOF {
+		switch p.curToken.Type {
+		case lexer.CASE:
+			sc := p.parseSwitchCase()
+			if sc != nil {
+				stmt.Cases = append(stmt.Cases, sc)
+			}
+
+		case lexer.DEFAULT:
+			if stmt.Default != nil {
+				p.errorAt(p.curToken, "duplicate default case")
+			}
+
+			if !p.expectPeek(lexer.COLON) {
+				return stmt
+			}
+
+			p.nextToken() // :
+			p.nextToken() // first stmt in body (or case/})
+
+			if stmt.Default == nil {
+				stmt.Default = &ast.SwitchCase{Token: p.curToken, Body: p.parseCaseBody()}
+			} else {
+				p.parseCaseBody() // 重複 default は解析して捨てる
+			}
+
+		default:
+			p.errorAt(
+				p.curToken,
+				"unexpected token '%s' in switch, expected 'case' or 'default'",
+				tokenLabel(p.curToken),
+			)
+			return stmt
+		}
+	}
+
+	if p.curToken.Type == lexer.EOF {
+		p.errorAt(p.curToken, "expected '}', got EOF")
+	}
+
+	return stmt
+}
+
+// parseSwitchCase は case 1, 2: から本体までをパースする
+func (p *Parser) parseSwitchCase() *ast.SwitchCase {
+	sc := &ast.SwitchCase{
+		Token: p.curToken,
+	}
+
+	p.nextToken() // first value
+	sc.Values = append(sc.Values, p.parseExpression(LOWEST))
+
+	for p.peekToken.Type == lexer.COMMA {
+		p.nextToken() // ,
+		p.nextToken() // next value
+		sc.Values = append(sc.Values, p.parseExpression(LOWEST))
+	}
+
+	if !p.expectPeek(lexer.COLON) {
+		return sc
+	}
+
+	p.nextToken() // :
+	p.nextToken() // first stmt in body
+
+	sc.Body = p.parseCaseBody()
+
+	return sc
+}
+
+// parseCaseBody は case 本体の文を CASE / DEFAULT / RBRACE まで解析する
+func (p *Parser) parseCaseBody() *ast.BlockStatement {
+	body := &ast.BlockStatement{
+		Token: p.curToken,
+	}
+
+	for p.curToken.Type != lexer.CASE && p.curToken.Type != lexer.DEFAULT &&
+		p.curToken.Type != lexer.RBRACE && p.curToken.Type != lexer.EOF {
+
+		stmt := p.parseStatement()
+		if stmt != nil {
+			body.Statements = append(body.Statements, stmt)
+		}
+
+		p.nextToken()
+	}
+
+	return body
 }
 
 func (p *Parser) parseReturnStatement() *ast.ReturnStatement {

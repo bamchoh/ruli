@@ -1013,3 +1013,42 @@ func TestArrayTypeParseErrors(t *testing.T) {
 		"unexpected token ']'",
 	}, t)
 }
+
+func TestSwitchStatementParse(t *testing.T) {
+	input := `switch x {
+	case 1, 2:
+		print("low")
+	default:
+		print("other")
+	}`
+
+	l := lexer.New(input)
+	p := New(l)
+	program := p.ParseProgram()
+	if len(p.Errors()) != 0 {
+		t.Fatalf("unexpected parse errors: %v", p.Errors())
+	}
+	if len(program.Statements) != 1 {
+		t.Fatalf("program.Statements does not contain 1 statement. got=%d", len(program.Statements))
+	}
+
+	sw, ok := program.Statements[0].(*ast.SwitchStatement)
+	if !ok {
+		t.Fatalf("stmt not *ast.SwitchStatement. got=%T", program.Statements[0])
+	}
+	if !testIdentifier(t, sw.Value, "x") {
+		t.Fatalf("sw.Value not as expected")
+	}
+	if len(sw.Cases) != 1 {
+		t.Fatalf("sw.Cases does not contain 1 case. got=%d", len(sw.Cases))
+	}
+	if len(sw.Cases[0].Values) != 2 {
+		t.Fatalf("case does not contain 2 values. got=%d", len(sw.Cases[0].Values))
+	}
+	if len(sw.Cases[0].Body.Statements) != 1 {
+		t.Fatalf("case body does not contain 1 statement")
+	}
+	if sw.Default == nil || len(sw.Default.Values) != 0 {
+		t.Fatalf("default not as expected")
+	}
+}

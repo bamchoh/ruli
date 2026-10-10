@@ -85,6 +85,8 @@ func (c *Checker) checkStatement(n ast.Statement, env *Env) {
 		c.checkIf(stmt, env)
 	case *ast.ForStatement:
 		c.checkFor(stmt, env)
+	case *ast.SwitchStatement:
+		c.checkSwitch(stmt, env)
 	case *ast.IncDecStatement:
 		c.checkIncDec(stmt, env)
 	case *ast.FunctionStatement:
@@ -177,6 +179,54 @@ func (c *Checker) checkFor(stmt *ast.ForStatement, env *Env) {
 	if stmt.Body != nil {
 		bodyEnv := NewEnclosedEnvironment(loopEnv)
 		c.checkStatements(stmt.Body.Statements, bodyEnv)
+	}
+}
+
+// checkSwitch は switch 文 (SPEC 7.4) を検査する
+func (c *Checker) checkSwitch(stmt *ast.SwitchStatement, env *Env) {
+	vt := c.checkExpr(stmt.Value, env)
+	if vt == nil {
+		return
+	}
+
+	// switch の値は比較可能な型のみ (struct / 配列は == と同じく禁止)
+	switch {
+	case isNumeric(vt) || vt.Name == STRING_TYPE.Name || vt.Name == BOOL_TYPE.Name:
+	default:
+		c.errAt(
+			stmt.GetToken(),
+			"switch value must be INT, REAL, STRING or BOOL, got %s",
+			vt.String(),
+		)
+		return
+	}
+
+	for _, sc := range stmt.Cases {
+		for _, value := range sc.Values {
+			cvt := c.checkExpr(value, env)
+			if cvt == nil {
+				continue
+			}
+
+			if !vt.Equal(cvt) {
+				c.errAt(
+					value.GetToken(),
+					"case value type mismatch: expected %s, got %s",
+					vt.String(),
+					cvt.String(),
+				)
+			}
+		}
+
+		if sc.Body != nil {
+			caseEnv := NewEnclosedEnvironment(env)
+			c.checkStatements(sc.Body.Statements, caseEnv)
+		}
+	}
+
+	if stmt.Default != nil && stmt.Default.Body != nil {
+		defaultEnv := NewEnclosedEnvironment(env)
+		c.checkStatements(stmt.Default.Body.Statements, defaultEnv)
 	}
 }
 

@@ -245,6 +245,43 @@ func (is *IncDecStatement) GetToken() lexer.Token {
 	return is.Token
 }
 
+// SwitchCase は case 1, 2: または default: の本体込みの 1 ブロック
+type SwitchCase struct {
+	Token  lexer.Token
+	Values []Expression // default は空
+	Body   *BlockStatement
+}
+
+// SwitchStatement は switch 文 (SPEC 7.4)。fallthrough なし
+type SwitchStatement struct {
+	Token   lexer.Token
+	Value   Expression
+	Cases   []*SwitchCase
+	Default *SwitchCase
+}
+
+func (ss *SwitchStatement) statementNode() {}
+
+func (ss *SwitchStatement) String() string {
+	var out strings.Builder
+	out.WriteString("switch")
+	out.WriteString(ss.Value.String())
+	out.WriteString(" {")
+	for range ss.Cases {
+		out.WriteString(" case")
+	}
+	if ss.Default != nil {
+		out.WriteString(" default")
+	}
+	out.WriteString(" }")
+	return out.String()
+}
+
+func (ss *SwitchStatement) GetToken() lexer.Token {
+	return ss.Token
+}
+
+// ForStatement は for i := 0; i < n; i++ { ... }
 type ForStatement struct {
 	Token     lexer.Token
 	Init      Statement

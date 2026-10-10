@@ -293,9 +293,22 @@ for i := 0; i < 10; i++ {
 
 予約語として使用可能
 
-## 7.4 switch（予約済み）
+## 7.4 switch
 
-将来実装
+```
+switch x {
+case 1, 2:
+	print("one or two")
+default:
+	print("other")
+}
+```
+
+- fallthrough なし（一致した case のみ実行）
+- `break` は switch を抜ける（最内側。ループ継続には影響しない）
+- `return` は関数へ伝播する
+- case 値の型は switch の値と一致必須（静的検査）
+- case 本体はスコープを持つ
 
 # 8. 予約語
 
@@ -314,12 +327,12 @@ for i := 0; i < 10; i++ {
 - false
 - break
 - continue
-
-将来構文の予約（使用するとパースエラー）：
-
 - switch
 - case
 - default
+
+将来構文の予約（使用するとパースエラー）：
+
 - defer
 - ref
 - nil
@@ -430,7 +443,6 @@ _Phase2（将来）_
 - ヒープ操作API
 - 動的配列
 - 複合代入（+= -=\* =/= %=）および && ||（short-circuit）
-- switch 文
 - distinct type（基本型の別名化）
 - 構造体リテラル（Motor{...} 形式）— `m : Motor` のゼロ値 + フィールド代入で代用
 
