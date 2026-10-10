@@ -74,6 +74,10 @@ func (l *Lexer) NextToken() Token {
 			ch := l.ch
 			l.readChar()
 			tok = l.newToken(INC, string(ch)+string(l.ch))
+		} else if l.peekChar() == '=' {
+			ch := l.ch
+			l.readChar()
+			tok = l.newToken(PLUS_ASSIGN, string(ch)+string(l.ch))
 		} else {
 			tok = l.newToken(PLUS, "+")
 		}
@@ -83,16 +87,40 @@ func (l *Lexer) NextToken() Token {
 			ch := l.ch
 			l.readChar()
 			tok = l.newToken(DEC, string(ch)+string(l.ch))
+		} else if l.peekChar() == '=' {
+			ch := l.ch
+			l.readChar()
+			tok = l.newToken(MINUS_ASSIGN, string(ch)+string(l.ch))
 		} else {
 			tok = l.newToken(MINUS, "-")
 		}
 
 	case '*':
-		tok = l.newToken(ASTERISK, "*")
+		if l.peekChar() == '=' {
+			ch := l.ch
+			l.readChar()
+			tok = l.newToken(MUL_ASSIGN, string(ch)+string(l.ch))
+		} else {
+			tok = l.newToken(ASTERISK, "*")
+		}
+
 	case '/':
-		tok = l.newToken(SLASH, "/")
+		if l.peekChar() == '=' {
+			ch := l.ch
+			l.readChar()
+			tok = l.newToken(DIV_ASSIGN, string(ch)+string(l.ch))
+		} else {
+			tok = l.newToken(SLASH, "/")
+		}
+
 	case '%':
-		tok = l.newToken(MOD, "%")
+		if l.peekChar() == '=' {
+			ch := l.ch
+			l.readChar()
+			tok = l.newToken(MOD_ASSIGN, string(ch)+string(l.ch))
+		} else {
+			tok = l.newToken(MOD, "%")
+		}
 
 	case ':':
 		if l.peekChar() == '=' {

@@ -31,6 +31,13 @@ const (
 	SLASH    = "/"
 	MOD      = "%"
 
+	// 複合代入 (SPEC 6.2)
+	PLUS_ASSIGN  = "+="
+	MINUS_ASSIGN = "-="
+	MUL_ASSIGN   = "*="
+	DIV_ASSIGN   = "/="
+	MOD_ASSIGN   = "%="
+
 	SEMICOLON = ";"
 
 	INT  = "INT"

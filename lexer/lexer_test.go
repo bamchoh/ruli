@@ -139,3 +139,17 @@ func TestReservedWords(t *testing.T) {
 		}
 	}
 }
+
+func TestCompoundAssignTokens(t *testing.T) {
+	l := New("+= -= *= /= %=")
+	expected := []TokenType{
+		PLUS_ASSIGN, MINUS_ASSIGN, MUL_ASSIGN, DIV_ASSIGN, MOD_ASSIGN, EOF,
+	}
+
+	for i, want := range expected {
+		tok := l.NextToken()
+		if tok.Type != want {
+			t.Fatalf("tests[%d] type wrong. expected=%q got=%q", i, want, tok.Type)
+		}
+	}
+}

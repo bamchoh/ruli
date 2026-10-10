@@ -1052,3 +1052,48 @@ func TestSwitchStatementParse(t *testing.T) {
 		t.Fatalf("default not as expected")
 	}
 }
+
+func TestCompoundAssignParse(t *testing.T) {
+	input := `x += 1`
+
+	l := lexer.New(input)
+	p := New(l)
+	program := p.ParseProgram()
+	if len(p.Errors()) != 0 {
+		t.Fatalf("unexpected parse errors: %v", p.Errors())
+	}
+	if len(program.Statements) != 1 {
+		t.Fatalf("program.Statements does not contain 1 statement. got=%d", len(program.Statements))
+	}
+
+	stmt, ok := program.Statements[0].(*ast.CompoundAssignStatement)
+	if !ok {
+		t.Fatalf("stmt not *ast.CompoundAssignStatement. got=%T", program.Statements[0])
+	}
+	if stmt.Operator != "+=" {
+		t.Fatalf("Operator not +=. got=%s", stmt.Operator)
+	}
+	if !testIdentifier(t, stmt.Target, "x") {
+		t.Fatalf("Target not as expected")
+	}
+	if !testLiteralExpression(t, stmt.Value, 1) {
+		t.Fatalf("Value not as expected")
+	}
+}
+
+func TestCompoundAssignIndexParse(t *testing.T) {
+	l := lexer.New(`buf[1] *= 10`)
+	p := New(l)
+	program := p.ParseProgram()
+	if len(p.Errors()) != 0 {
+		t.Fatalf("unexpected parse errors: %v", p.Errors())
+	}
+
+	stmt, ok := program.Statements[0].(*ast.CompoundAssignStatement)
+	if !ok {
+		t.Fatalf("stmt not *ast.CompoundAssignStatement. got=%T", program.Statements[0])
+	}
+	if _, ok := stmt.Target.(*ast.IndexExpression); !ok {
+		t.Fatalf("Target not *ast.IndexExpression. got=%T", stmt.Target)
+	}
+}

@@ -622,3 +622,62 @@ y`,
 		t,
 	)
 }
+
+func TestCompoundAssignEvals(t *testing.T) {
+	testEvalInteger(
+		`x := 10
+x += 5
+x -= 3
+x *= 4
+x /= 3
+x %= 5
+x`,
+		1,
+		t,
+	)
+}
+
+func TestCompoundAssignString(t *testing.T) {
+	evaluated := testEval(`s := "ab"
+s += "cd"
+s`)
+	if isError(evaluated) {
+		t.Fatalf("unexpected error: %s", evaluated.Inspect())
+	}
+	if got := evaluated.(*object.String).Value; got != "abcd" {
+		t.Fatalf("wrong value. got=%s, want=abcd", got)
+	}
+}
+
+func TestCompoundAssignWidthCheck(t *testing.T) {
+	testEvalError(
+		`w : SINT = 100
+w += 100`,
+		"value 200 out of range for SINT (-128..127)",
+		t,
+	)
+}
+
+func TestCompoundAssignOnArrayElement(t *testing.T) {
+	testEvalInteger(
+		`buf := [1, 2, 3]
+buf[1] *= 10
+buf[1]`,
+		20,
+		t,
+	)
+}
+
+func TestCompoundAssignOnStructField(t *testing.T) {
+	testEvalInteger(
+		`type Motor struct {
+	total: INT
+}
+
+m : Motor
+m.total += 7
+m.total`,
+		7,
+		t,
+	)
+}

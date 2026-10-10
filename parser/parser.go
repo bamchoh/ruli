@@ -255,21 +255,36 @@ func (p *Parser) parseMultiStatement() ast.Statement {
 }
 
 // parseAssignOrExpressionStatement は式を 1 つパースする。
-// 直後に = が続く場合は代入文として構築する (x = 10 / a[0] = 10)
+// 直後に = が続く場合は代入文、+= 等なら複合代入文として構築する
 func (p *Parser) parseAssignOrExpressionStatement() ast.Statement {
 	expr := p.parseExpression(LOWEST)
 
-	if p.peekToken.Type != lexer.ASSIGN {
-		return &ast.ExpressionStatement{Expression: expr}
+	switch p.peekToken.Type {
+	case lexer.ASSIGN:
+		p.nextToken() // =
+		p.nextToken() // value first token
+
+		return &ast.AssignStatement{
+			Left:  expr,
+			Value: p.parseExpression(LOWEST),
+		}
+
+	case lexer.PLUS_ASSIGN, lexer.MINUS_ASSIGN, lexer.MUL_ASSIGN,
+		lexer.DIV_ASSIGN, lexer.MOD_ASSIGN:
+		// 複合代入 (SPEC 6.2): x += 1 / a[0] *= 2 / m.speed -= 1
+		opToken := p.peekToken
+		p.nextToken() // 演算子
+		p.nextToken() // value first token
+
+		return &ast.CompoundAssignStatement{
+			Token:    expr.GetToken(),
+			Target:   expr,
+			Operator: opToken.Literal,
+			Value:    p.parseExpression(LOWEST),
+		}
 	}
 
-	p.nextToken() // =
-	p.nextToken() // value first token
-
-	return &ast.AssignStatement{
-		Left:  expr,
-		Value: p.parseExpression(LOWEST),
-	}
+	return &ast.ExpressionStatement{Expression: expr}
 }
 
 func (p *Parser) parseVarDeclStatement() *ast.VarDeclStatement {

@@ -5,6 +5,7 @@ import (
 	"math"
 	"ruli/ast"
 	"ruli/object"
+	"strings"
 )
 
 var (
@@ -115,6 +116,13 @@ func Eval(node ast.Node, env *object.Environment) object.Object {
 			return val
 		}
 		return evalAssignStatement(node, val, env)
+
+	case *ast.CompoundAssignStatement:
+		val := Eval(node.Value, env)
+		if isError(val) {
+			return val
+		}
+		return evalCompoundAssignStatement(node, val, env)
 
 	case *ast.IntegerLiteral:
 		return &object.Integer{Value: node.Value}
@@ -325,33 +333,45 @@ func evalBinaryExpression(be *ast.BinaryExpression, env *object.Environment) obj
 		return right
 	}
 
+	return applyBinaryOperator(be.Operator, left, right, be)
+}
+
+// applyBinaryOperator は等しい型同士の二項演算を実行する。
+// 複合代入 (x += 1) は評価済みの左辺値とここを共有する
+func applyBinaryOperator(
+	operator string,
+	left, right object.Object,
+	node ast.Node,
+) object.Object {
+
 	switch {
 	case left.Type() == object.INTEGER_OBJ && right.Type() == object.INTEGER_OBJ:
-		return evalIntegerBinaryExpression(be, left, right)
+		return evalIntegerBinaryExpression(operator, left, right, node)
 	case left.Type() == object.REAL_OBJ && right.Type() == object.REAL_OBJ:
-		return evalRealBinaryExpression(be, left, right)
+		return evalRealBinaryExpression(operator, left, right, node)
 	case left.Type() == object.STRING_OBJ && right.Type() == object.STRING_OBJ:
-		return evalStringInfixExpression(be, left, right)
+		return evalStringInfixExpression(operator, left, right, node)
 	}
 
 	return newErrorAtNode(
-		be,
+		node,
 		"type mismatch: %s %s %s",
 		left.Type(),
-		be.Operator,
+		operator,
 		right.Type(),
 	)
 }
 
 func evalIntegerBinaryExpression(
-	be *ast.BinaryExpression,
+	operator string,
 	left, right object.Object,
+	node ast.Node,
 ) object.Object {
 
 	lv := left.(*object.Integer).Value
 	rv := right.(*object.Integer).Value
 
-	switch be.Operator {
+	switch operator {
 	case "+":
 		return &object.Integer{Value: lv + rv}
 	case "-":
@@ -360,12 +380,12 @@ func evalIntegerBinaryExpression(
 		return &object.Integer{Value: lv * rv}
 	case "/":
 		if rv == 0 {
-			return newErrorAtNode(be, "division by zero")
+			return newErrorAtNode(node, "division by zero")
 		}
 		return &object.Integer{Value: lv / rv}
 	case "%":
 		if rv == 0 {
-			return newErrorAtNode(be, "division by zero")
+			return newErrorAtNode(node, "division by zero")
 		}
 		return &object.Integer{Value: lv % rv}
 
@@ -379,18 +399,19 @@ func evalIntegerBinaryExpression(
 		return nativeBoolToBooleanObject(lv != rv)
 	}
 
-	return newErrorAtNode(be, "unsupported operator: %s", be.Operator)
+	return newErrorAtNode(node, "unsupported operator: %s", operator)
 }
 
 func evalRealBinaryExpression(
-	be *ast.BinaryExpression,
+	operator string,
 	left, right object.Object,
+	node ast.Node,
 ) object.Object {
 
 	lv := left.(*object.Real).Value
 	rv := right.(*object.Real).Value
 
-	switch be.Operator {
+	switch operator {
 	case "+":
 		return &object.Real{Value: lv + rv}
 	case "-":
@@ -399,12 +420,12 @@ func evalRealBinaryExpression(
 		return &object.Real{Value: lv * rv}
 	case "/":
 		if rv == 0 {
-			return newErrorAtNode(be, "division by zero")
+			return newErrorAtNode(node, "division by zero")
 		}
 		return &object.Real{Value: lv / rv}
 	case "%":
 		if rv == 0 {
-			return newErrorAtNode(be, "division by zero")
+			return newErrorAtNode(node, "division by zero")
 		}
 		return &object.Real{Value: math.Mod(lv, rv)}
 
@@ -418,17 +439,18 @@ func evalRealBinaryExpression(
 		return nativeBoolToBooleanObject(lv != rv)
 	}
 
-	return newErrorAtNode(be, "unsupported operator: %s", be.Operator)
+	return newErrorAtNode(node, "unsupported operator: %s", operator)
 }
 
 func evalStringInfixExpression(
-	be *ast.BinaryExpression,
+	operator string,
 	left, right object.Object,
+	node ast.Node,
 ) object.Object {
 	lv := left.(*object.String).Value
 	rv := right.(*object.String).Value
 
-	switch be.Operator {
+	switch operator {
 	case "+":
 		return &object.String{Value: lv + rv}
 	case "==":
@@ -437,7 +459,7 @@ func evalStringInfixExpression(
 		return nativeBoolToBooleanObject(lv != rv)
 	}
 
-	return newErrorAtNode(be, "unsupported operator: %s", be.Operator)
+	return newErrorAtNode(node, "unsupported operator: %s", operator)
 }
 
 func nativeBoolToBooleanObject(input bool) *object.Boolean {
@@ -923,11 +945,84 @@ func evalAssignStatement(
 	return newErrorAtNode(stmt, "invalid assignment target")
 }
 
+// evalCompoundAssignStatement は x += 1 / a[0] *= 2 / m.speed -= 1 を実行する (SPEC 6.2)。
+// 左辺は一度だけ評価され、現在値と右辺に演算子を適用して書き戻す
+func evalCompoundAssignStatement(
+	stmt *ast.CompoundAssignStatement,
+	val object.Object,
+	env *object.Environment,
+) object.Object {
+
+	operator := strings.TrimSuffix(stmt.Operator, "=")
+
+	mutate := func(old object.Object) object.Object {
+		return applyBinaryOperator(operator, old, val, stmt)
+	}
+
+	switch target := stmt.Target.(type) {
+
+	case *ast.Identifier:
+		old, ok := env.Get(target.Value)
+		if !ok {
+			return newErrorAtNode(stmt, "undefined variable: %s", target.Value)
+		}
+
+		stored := mutate(old)
+		if isError(stored) {
+			return stored
+		}
+
+		// 宣言時に型が明示された変数は実行時幅チェックを行う
+		if typeName, ok := env.VarType(target.Value); ok {
+			if errObj := checkWidth(stmt, typeName, stored); errObj != nil {
+				return errObj
+			}
+		}
+
+		if !env.Assign(target.Value, bindValue(stored)) {
+			return newErrorAtNode(stmt, "undefined variable: %s", target.Value)
+		}
+		return stored
+
+	case *ast.IndexExpression:
+		return evalIndexWrite(target, env, func(old object.Object) object.Object {
+			stored := mutate(old)
+			if isError(stored) {
+				return stored
+			}
+			return bindValue(stored)
+		})
+
+	case *ast.SelectorExpression:
+		return evalSelectorWrite(target, env, func(old object.Object) object.Object {
+			stored := mutate(old)
+			if isError(stored) {
+				return stored
+			}
+			return bindValue(stored)
+		})
+	}
+
+	return newErrorAtNode(stmt, "invalid assignment target")
+}
+
 // evalSelectorAssign は m.speed = 10 のようなフィールドへの代入
 func evalSelectorAssign(
 	left *ast.SelectorExpression,
 	val object.Object,
 	env *object.Environment,
+) object.Object {
+	return evalSelectorWrite(left, env, func(old object.Object) object.Object {
+		return bindValue(val)
+	})
+}
+
+// evalSelectorWrite は struct フィールドへの書き込みを共通化する。
+// mutate は現在のフィールド値を受け取り、格納する値を返す
+func evalSelectorWrite(
+	left *ast.SelectorExpression,
+	env *object.Environment,
+	mutate func(old object.Object) object.Object,
 ) object.Object {
 
 	obj := Eval(left.Object, env)
@@ -940,7 +1035,8 @@ func evalSelectorAssign(
 		return newErrorAtNode(left, "no field '%s' on %s", left.Field, obj.Type())
 	}
 
-	if _, ok := s.Fields[left.Field]; !ok {
+	old, ok := s.Fields[left.Field]
+	if !ok {
 		return newErrorAtNode(left, "undefined field: %s", left.Field)
 	}
 
@@ -948,16 +1044,27 @@ func evalSelectorAssign(
 	if parentType := typeNameOfExpr(left.Object, env); parentType != "" {
 		if def, ok := env.GetTypeDef(parentType); ok {
 			if fieldType, ok := def.FieldTypes[left.Field]; ok {
-				if errObj := checkWidth(left, basicTypeName(fieldType), val); errObj != nil {
+				stored := mutate(old)
+				if isError(stored) {
+					return stored
+				}
+				if errObj := checkWidth(left, basicTypeName(fieldType), stored); errObj != nil {
 					return errObj
 				}
+				s.Fields[left.Field] = stored
+				return stored
 			}
 		}
 	}
 
-	s.Fields[left.Field] = bindValue(val)
+	stored := mutate(old)
+	if isError(stored) {
+		return stored
+	}
 
-	return val
+	s.Fields[left.Field] = stored
+
+	return stored
 }
 
 // basicTypeName は TypeNode から幅チェック可能な基本型名を取り出す
@@ -999,6 +1106,18 @@ func evalIndexAssign(
 	val object.Object,
 	env *object.Environment,
 ) object.Object {
+	return evalIndexWrite(left, env, func(old object.Object) object.Object {
+		return bindValue(val)
+	})
+}
+
+// evalIndexWrite は配列要素への書き込みを共通化する。
+// mutate は現在の要素値を受け取り、格納する値 (エラー時は error オブジェクト) を返す
+func evalIndexWrite(
+	left *ast.IndexExpression,
+	env *object.Environment,
+	mutate func(old object.Object) object.Object,
+) object.Object {
 
 	arrayObj := Eval(left.Left, env)
 	if isError(arrayObj) {
@@ -1026,7 +1145,12 @@ func evalIndexAssign(
 		return newErrorAtNode(left, "index out of range: %d", idx)
 	}
 
-	array.Elements[idx] = bindValue(val)
+	stored := mutate(array.Elements[idx])
+	if isError(stored) {
+		return stored
+	}
 
-	return val
+	array.Elements[idx] = stored
+
+	return stored
 }

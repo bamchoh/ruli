@@ -5,6 +5,7 @@ import (
 	"ruli/ast"
 	"ruli/lexer"
 	"ruli/object"
+	"strings"
 )
 
 // TypeError は型チェックエラー (行列位置つき)
@@ -81,6 +82,8 @@ func (c *Checker) checkStatement(n ast.Statement, env *Env) {
 		c.checkVarDecl(stmt, env)
 	case *ast.AssignStatement:
 		c.checkAssign(stmt, env)
+	case *ast.CompoundAssignStatement:
+		c.checkCompoundAssign(stmt, env)
 	case *ast.IfStatement:
 		c.checkIf(stmt, env)
 	case *ast.ForStatement:
@@ -332,52 +335,21 @@ func (c *Checker) checkAssign(stmt *ast.AssignStatement, env *Env) {
 		}
 
 	case *ast.IndexExpression:
-		array := c.checkExpr(left.Left, env)
-		if array == nil {
-			return
-		}
-
-		if array.Name != ARRAY_TYPE.Name && array.Name != ANY_TYPE.Name {
-			c.errAt(left.GetToken(), "not an array")
-			return
-		}
-
-		// 既知サイズへのリテラルインデックスは静的に判定する
-		if array.Name == ARRAY_TYPE.Name && array.ArrLen > 0 {
-			if lit, ok := left.Index.(*ast.IntegerLiteral); ok {
-				if lit.Value < 0 || lit.Value >= array.ArrLen {
-					c.errAt(
-						lit.GetToken(),
-						"index out of range: %d (array size %d)",
-						lit.Value,
-						array.ArrLen,
-					)
-					return
-				}
-			}
-		}
-
-		index := c.checkExpr(left.Index, env)
-		if index != nil && index.Name != INT_TYPE.Name {
-			c.errAt(
-				left.Index.GetToken(),
-				"index must be INT, got %s",
-				index.Name,
-			)
+		// 配列ターゲットの共通検査 (境界・インデックス型)
+		elem := c.checkIndexTarget(left, env)
+		if elem == nil {
 			return
 		}
 
 		// 固定幅要素へのリテラル代入は範囲を静的に検査する
-		if array.Elem != nil {
-			c.checkLiteralRange(array.Elem.Name, stmt.Value)
-		}
+		c.checkLiteralRange(elem.Name, stmt.Value)
 
 		vt := c.checkExpr(stmt.Value, env)
-		if vt != nil && array.Elem != nil && !array.Elem.Equal(vt) {
+		if vt != nil && !elem.Equal(vt) {
 			c.errAt(
 				stmt.Value.GetToken(),
 				"type mismatch: %s %s %s",
-				array.Elem.String(),
+				elem.String(),
 				"=",
 				vt.String(),
 			)
@@ -419,6 +391,108 @@ func (c *Checker) checkAssign(stmt *ast.AssignStatement, env *Env) {
 	default:
 		c.errAt(stmt.GetToken(), "invalid assignment target")
 	}
+}
+
+// checkIndexTarget は配列への書き込みターゲット (a[0] = / a[0] +=) の共通検査。
+// 配列性・静的境界・インデックス型を検査し、要素型を返す (エラーなら nil)
+func (c *Checker) checkIndexTarget(left *ast.IndexExpression, env *Env) *Type {
+	array := c.checkExpr(left.Left, env)
+	if array == nil {
+		return nil
+	}
+
+	if array.Name != ARRAY_TYPE.Name && array.Name != ANY_TYPE.Name {
+		c.errAt(left.GetToken(), "not an array")
+		return nil
+	}
+
+	// 既知サイズへのリテラルインデックスは静的に判定する
+	if array.Name == ARRAY_TYPE.Name && array.ArrLen > 0 {
+		if lit, ok := left.Index.(*ast.IntegerLiteral); ok {
+			if lit.Value < 0 || lit.Value >= array.ArrLen {
+				c.errAt(
+					lit.GetToken(),
+					"index out of range: %d (array size %d)",
+					lit.Value,
+					array.ArrLen,
+				)
+				return nil
+			}
+		}
+	}
+
+	index := c.checkExpr(left.Index, env)
+	if index != nil && index.Name != INT_TYPE.Name {
+		c.errAt(
+			left.Index.GetToken(),
+			"index must be INT, got %s",
+			index.Name,
+		)
+		return nil
+	}
+
+	if array.Elem == nil {
+		return UNKNOWN_TYPE
+	}
+	return array.Elem
+}
+
+// checkCompoundAssign は x += 1 などの複合代入を検査する (SPEC 6.2)。
+// 二項演算と同じ型規則 (checkOperation) を左辺型に適用する
+func (c *Checker) checkCompoundAssign(stmt *ast.CompoundAssignStatement, env *Env) {
+	operator := strings.TrimSuffix(stmt.Operator, "=")
+
+	var tLeft *Type
+
+	switch target := stmt.Target.(type) {
+	case *ast.Identifier:
+		t, ok := env.Get(target.Value)
+		if !ok {
+			c.errAt(target.GetToken(), "undefined variable: %s", target.Value)
+			return
+		}
+		tLeft = t
+
+	case *ast.IndexExpression:
+		tLeft = c.checkIndexTarget(target, env)
+		if tLeft == nil {
+			return
+		}
+
+	case *ast.SelectorExpression:
+		ot := c.checkExpr(target.Object, env)
+		if ot == nil {
+			return
+		}
+
+		if ot.Name == ANY_TYPE.Name || ot.Name == UNKNOWN_TYPE.Name {
+			c.checkExpr(stmt.Value, env)
+			return
+		}
+
+		if ot.Name != STRUCT_TYPE.Name {
+			c.errAt(target.GetToken(), "no field '%s' on %s", target.Field, ot.Name)
+			return
+		}
+
+		ft, ok := ot.Fields[target.Field]
+		if !ok {
+			c.errAt(target.GetToken(), "undefined field: %s", target.Field)
+			return
+		}
+		tLeft = ft
+
+	default:
+		c.errAt(stmt.GetToken(), "invalid assignment target")
+		return
+	}
+
+	vt := c.checkExpr(stmt.Value, env)
+	if vt == nil {
+		return
+	}
+
+	c.checkOperation(tLeft, operator, vt, stmt.GetToken())
 }
 
 // checkMultiVarDecl は x, ok := f() のような複数変数の束縛を検査する (SPEC 5.4)
@@ -862,6 +936,12 @@ func (c *Checker) checkBinary(be *ast.BinaryExpression, env *Env) *Type {
 		return nil
 	}
 
+	return c.checkOperation(lt, be.Operator, rt, be.GetToken())
+}
+
+// checkOperation は二項演算の型規則 (SPEC 6.2 / 6.3) を検査し、結果型を返す。
+// 複合代入 (x += 1) と二項演算 (x + 1) で同じ規則を共有する
+func (c *Checker) checkOperation(lt *Type, operator string, rt *Type, token lexer.Token) *Type {
 	// 型不明のオペランド (未指定引数など) は演算の正否を判断できないので通す
 	if lt.Name == UNKNOWN_TYPE.Name || lt.Name == ANY_TYPE.Name {
 		if isNumeric(rt) {
@@ -876,7 +956,7 @@ func (c *Checker) checkBinary(be *ast.BinaryExpression, env *Env) *Type {
 		return UNKNOWN_TYPE
 	}
 
-	switch be.Operator {
+	switch operator {
 	case "+", "-", "*", "/", "%":
 		// SPEC 6.3: INT + REAL はエラー。明示キャスト必須
 		if !lt.Equal(rt) {
@@ -885,7 +965,7 @@ func (c *Checker) checkBinary(be *ast.BinaryExpression, env *Env) *Type {
 		if isNumeric(lt) {
 			return lt
 		}
-		if be.Operator == "+" && lt.Name == STRING_TYPE.Name {
+		if operator == "+" && lt.Name == STRING_TYPE.Name {
 			return lt
 		}
 
@@ -902,7 +982,7 @@ func (c *Checker) checkBinary(be *ast.BinaryExpression, env *Env) *Type {
 		for _, t := range []*Type{lt, rt} {
 			switch t.Name {
 			case STRUCT_TYPE.Name, ARRAY_TYPE.Name, FUNCTION_TYPE.Name:
-				c.errAt(be.GetToken(), "cannot compare %s", t.Name)
+				c.errAt(token, "cannot compare %s", t.Name)
 				return nil
 			}
 		}
@@ -912,10 +992,10 @@ func (c *Checker) checkBinary(be *ast.BinaryExpression, env *Env) *Type {
 	}
 
 	c.errAt(
-		be.GetToken(),
+		token,
 		"type mismatch: %s %s %s",
 		lt.Name,
-		be.Operator,
+		operator,
 		rt.Name,
 	)
 	return nil

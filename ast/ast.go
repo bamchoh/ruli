@@ -408,6 +408,25 @@ func (rs *ReturnStatement) GetToken() lexer.Token {
 	return rs.Token
 }
 
+// CompoundAssignStatement は x += 1 / a[0] *= 2 / m.speed -= 1 のような
+// 複合代入 (SPEC 6.2)。左辺は一度だけ評価される
+type CompoundAssignStatement struct {
+	Token    lexer.Token // 代入先の始端
+	Target   Expression
+	Operator string // "+=" "-=" "*=" "/=" "%="
+	Value    Expression
+}
+
+func (ca *CompoundAssignStatement) statementNode() {}
+
+func (ca *CompoundAssignStatement) String() string {
+	return ca.Target.String() + " " + ca.Operator + " " + ca.Value.String()
+}
+
+func (ca *CompoundAssignStatement) GetToken() lexer.Token {
+	return ca.Token
+}
+
 // MultiVarDeclStatement は x, ok := f() のような複数変数の束縛 (SPEC 5.4)
 type MultiVarDeclStatement struct {
 	Token  lexer.Token

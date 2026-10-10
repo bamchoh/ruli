@@ -528,3 +528,57 @@ case 1:
 		t,
 	)
 }
+
+func TestCheckCompoundAssignValid(t *testing.T) {
+	input := `x := 1
+x += 2
+x -= 3
+x *= 4
+x /= 2
+x %= 7
+
+buf := [1, 2, 3]
+buf[0] += 5
+
+s := "a"
+s += "b"
+
+w : WORD = 5
+w += 10`
+	if errs := Check(parseInput(input)); len(errs) > 0 {
+		t.Fatalf("unexpected errors: %v", errs)
+	}
+}
+
+func TestCheckCompoundAssignUndefined(t *testing.T) {
+	testCheckErrors(
+		`x += 1`,
+		[]string{"undefined variable: x"},
+		t,
+	)
+}
+
+func TestCheckCompoundAssignMismatch(t *testing.T) {
+	testCheckErrors(
+		`x := 1
+x += "a"`,
+		[]string{"type mismatch: INT + STRING"},
+		t,
+	)
+	testCheckErrors(
+		`flag := true
+flag += 1`,
+		[]string{"type mismatch: BOOL + INT"},
+		t,
+	)
+}
+
+func TestCheckCompoundAssignStaticBounds(t *testing.T) {
+	// 変数宣言と同じ静的検査 (未定義インデックスは実行時へ)
+	testCheckErrors(
+		`buf := [1, 2, 3]
+buf[3] += 1`,
+		[]string{"index out of range: 3 (array size 3)"},
+		t,
+	)
+}
