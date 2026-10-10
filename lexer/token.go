@@ -70,6 +70,15 @@ const (
 
 	TYPE   = "TYPE"
 	STRUCT = "STRUCT"
+
+	// 将来対応の予約語 (SPEC 7.4 / 8.1 / 10)。
+	// トークンとしては存在するが prefix パーサが無く、使用するとパースエラーになる
+	NIL     = "NIL"
+	REF     = "REF"
+	DEFER   = "DEFER"
+	SWITCH  = "SWITCH"
+	CASE    = "CASE"
+	DEFAULT = "DEFAULT"
 )
 
 var keywords = map[string]TokenType{
@@ -84,6 +93,12 @@ var keywords = map[string]TokenType{
 	"false":    FALSE,
 	"type":     TYPE,
 	"struct":   STRUCT,
+	"nil":      NIL,
+	"ref":      REF,
+	"defer":    DEFER,
+	"switch":   SWITCH,
+	"case":     CASE,
+	"default":  DEFAULT,
 }
 
 func LookupIdent(ident string) TokenType {

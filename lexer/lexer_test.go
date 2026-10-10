@@ -1,6 +1,8 @@
 package lexer
 
-import "testing"
+import (
+	"testing"
+)
 
 func TestAssignStatement(t *testing.T) {
 	input := `x := 10;
@@ -110,6 +112,30 @@ func TestAssignStatement(t *testing.T) {
 		if tok.Literal != tt.expectedLiteral {
 			t.Fatalf("tests[%d] literal wrong. expected=%q got=%q",
 				i, tt.expectedLiteral, tok.Literal)
+		}
+	}
+}
+
+func TestReservedWords(t *testing.T) {
+	// SPEC 8.1 / 10: 将来構文の予約語はトークンとして存在する
+	l := New("nil ref defer switch case default")
+	tests := []struct {
+		expectedType    TokenType
+		expectedLiteral string
+	}{
+		{NIL, "nil"},
+		{REF, "ref"},
+		{DEFER, "defer"},
+		{SWITCH, "switch"},
+		{CASE, "case"},
+		{DEFAULT, "default"},
+		{EOF, ""},
+	}
+
+	for i, tt := range tests {
+		tok := l.NextToken()
+		if tok.Type != tt.expectedType {
+			t.Fatalf("tests[%d] type wrong. expected=%q got=%q", i, tt.expectedType, tok.Type)
 		}
 	}
 }
