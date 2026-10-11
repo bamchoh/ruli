@@ -1,6 +1,7 @@
 package checker
 
 import (
+	"errors"
 	"fmt"
 	"ruli/ast"
 	"ruli/lexer"
@@ -33,11 +34,36 @@ type Checker struct {
 	errors []TypeError
 }
 
+// External はホスト (Go) 側で定義される関数の宣言 (embed API)。
+// ReturnType は静的検査用の型名 (例 "INT")。空なら戻り値なし
+type External struct {
+	Name       string
+	ReturnType string
+}
+
+// NewChecker は新しい Checker を作る
+func NewChecker() *Checker {
+	return &Checker{env: NewEnv(), types: make(map[string]*Type)}
+}
+
+// SetExternal はホスト関数の宣言を checker 環境へ登録する。
+// 引数の個数・型は可変長 (ホスト側が検証する)。戻り値型は静的検査に使われる
+func (c *Checker) SetExternal(ext External) error {
+	var rets []*Type
+	if ext.ReturnType != "" {
+		t, ok := resolveBasic(ext.ReturnType)
+		if !ok {
+			return errors.New("unknown type: " + ext.ReturnType)
+		}
+		rets = []*Type{t}
+	}
+	c.env.Set(ext.Name, &Type{Name: FUNCTION_TYPE.Name, Variadic: true, Returns: rets})
+	return nil
+}
+
 // Check はプログラム全体を型チェックし、見つかったエラーすべてを返す。
 // SPEC 2.1 に従い、まずトップレベルの func 宣言を登録してから文を順にチェックする
-func Check(program *ast.Program) []TypeError {
-	c := &Checker{env: NewEnv(), types: make(map[string]*Type)}
-
+func (c *Checker) Check(program *ast.Program) []TypeError {
 	// 宣言収集 (SPEC 2.1): 順不同の参照と再帰を可能にする。
 	// struct (プレースホルダ) → func (シグネチャ) の 2 パスで登録する
 	for _, stmt := range program.Statements {
@@ -54,6 +80,23 @@ func Check(program *ast.Program) []TypeError {
 	for _, stmt := range program.Statements {
 		c.checkStatement(stmt, c.env)
 	}
+
+	return c.errors
+}
+
+// Check はプログラム全体を型チェックし、見つかったエラーすべてを返す。
+// externals はホスト関数 (embed API) の宣言。
+// まとめて 1 回の検査に使う場合のコンビニエンス版 (embed API 開発には NewChecker を推奨)
+func Check(program *ast.Program, externals ...External) []TypeError {
+	c := NewChecker()
+
+	for _, ext := range externals {
+		if err := c.SetExternal(ext); err != nil {
+			c.errors = append(c.errors, TypeError{Message: err.Error()})
+		}
+	}
+
+	c.Check(program)
 
 	return c.errors
 }
@@ -1079,6 +1122,18 @@ func (c *Checker) checkCall(e *ast.CallExpression, env *Env) *Type {
 			"",
 		)
 		return nil
+	}
+
+	// ホスト関数 (embed API) の引数は個数・型不定。ホスト側が検証する
+	if fnType.Variadic {
+		for _, arg := range e.Arguments {
+			c.checkExpr(arg, env)
+		}
+
+		if len(fnType.Returns) == 0 {
+			return VOID_TYPE
+		}
+		return fnType.Returns[0]
 	}
 
 	// 引数

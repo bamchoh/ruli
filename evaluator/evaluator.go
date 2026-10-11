@@ -2,6 +2,7 @@ package evaluator
 
 import (
 	"fmt"
+	"io"
 	"math"
 	"ruli/ast"
 	"ruli/object"
@@ -46,6 +47,44 @@ var builtins = map[string]*object.Builtin{
 			return &object.Null{}, fmt.Errorf("argument to `len` not supported, got %s", args[0].Type())
 		},
 	},
+}
+
+// InstallBuiltins は組み込み関数 (print / len) を環境へ登録する。
+// out は print の出力先。環境に登録された組込みはホスト関数や
+// ユーザ定義によって上書きできる (ユーザ定義が優先)
+func InstallBuiltins(env *object.Environment, w io.Writer) {
+	env.Set("print", &object.Builtin{
+		Fn: func(args ...object.Object) (object.Object, error) {
+			for _, arg := range args {
+				fmt.Fprintln(w, arg.Inspect())
+			}
+			return &object.Null{}, nil
+		},
+	})
+
+	env.Set("len", &object.Builtin{
+		Fn: func(args ...object.Object) (object.Object, error) {
+
+			if len(args) != 1 {
+				return &object.Null{}, fmt.Errorf("wrong number of arguments. got=%d, want=1", len(args))
+			}
+
+			switch arg := args[0].(type) {
+
+			case *object.Array:
+				return &object.Integer{
+					Value: (len(arg.Elements)),
+				}, nil
+
+			case *object.String:
+				return &object.Integer{
+					Value: (len([]rune(arg.Value))),
+				}, nil
+			}
+
+			return &object.Null{}, fmt.Errorf("argument to `len` not supported, got %s", args[0].Type())
+		},
+	})
 }
 
 func Eval(node ast.Node, env *object.Environment) object.Object {
@@ -145,15 +184,16 @@ func Eval(node ast.Node, env *object.Environment) object.Object {
 		return nativeBoolToBooleanObject(node.Value)
 
 	case *ast.Identifier:
+		// 環境を優先 (ホスト関数やユーザ定義が組み込みを上書きできる)
+		if v, ok := env.Get(node.Value); ok {
+			return v
+		}
+
 		if b, ok := builtins[node.Value]; ok {
 			return b
 		}
 
-		v, ok := env.Get(node.Value)
-		if !ok {
-			return newErrorAtNode(node, "identifier not found: %s", node.Value)
-		}
-		return v
+		return newErrorAtNode(node, "identifier not found: %s", node.Value)
 
 	case *ast.BinaryExpression:
 		return evalBinaryExpression(node, env)

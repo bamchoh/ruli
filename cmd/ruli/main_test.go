@@ -1,9 +1,13 @@
 package main
 
 import (
+	"bytes"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
+
+	"ruli"
 )
 
 func writeScript(t *testing.T, content string) string {
@@ -16,13 +20,21 @@ func writeScript(t *testing.T, content string) string {
 }
 
 func TestRunValidScript(t *testing.T) {
-	if err := run(writeScript(t, "x := 1 + 2\nprint(x)\n")); err != nil {
+	buf := &bytes.Buffer{}
+	s := ruli.New()
+	s.SetOutput(buf)
+
+	if err := s.RunFile(writeScript(t, "x := 1 + 2\nprint(x)\n")); err != nil {
 		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if got := buf.String(); got != "3\n" {
+		t.Fatalf("wrong output. got=%q", got)
 	}
 }
 
 func TestRunParseError(t *testing.T) {
-	err := run(writeScript(t, "print(\"a\", \"b\""))
+	err := ruli.New().RunFile(writeScript(t, "print(\"a\", \"b\""))
 	if err == nil {
 		t.Fatal("expected error")
 	}
@@ -32,7 +44,7 @@ func TestRunParseError(t *testing.T) {
 }
 
 func TestRunMultipleParseErrors(t *testing.T) {
-	err := run(writeScript(t, "a := @\nb := @"))
+	err := ruli.New().RunFile(writeScript(t, "a := @\nb := @"))
 	if err == nil {
 		t.Fatal("expected error")
 	}
@@ -43,12 +55,12 @@ func TestRunMultipleParseErrors(t *testing.T) {
 		}
 	}
 	if count != 2 {
-		t.Fatalf("expected 2 error lines, got %d (%q)", count, err)
+		t.Fatalf("expected 2 error lines, got %d (%q)", count, err.Error())
 	}
 }
 
 func TestRunRuntimeError(t *testing.T) {
-	err := run(writeScript(t, "x := 1 / 0"))
+	err := ruli.New().RunFile(writeScript(t, "x := 1 / 0"))
 	if err == nil {
 		t.Fatal("expected error")
 	}
@@ -58,15 +70,19 @@ func TestRunRuntimeError(t *testing.T) {
 }
 
 func TestRunMissingFile(t *testing.T) {
-	if err := run(writeScript(t, "") + "-missing"); err == nil {
+	err := ruli.New().RunFile(writeScript(t, "") + "-missing")
+	if err == nil {
 		t.Fatal("expected error")
+	}
+	if !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("expected not-exist error, got %v", err)
 	}
 }
 
 func TestRunFixedWidthTypesAndCasts(t *testing.T) {
-	// 固定幅型宣言 + 実数族の暗黙変換 (checker では同族は許可)
+	s := ruli.New()
 	script := "w : WORD = 5\nd : DINT = w\nr := REAL(d)"
-	if err := run(writeScript(t, script)); err != nil {
+	if err := s.RunString(script); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }

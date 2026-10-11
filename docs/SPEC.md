@@ -449,10 +449,26 @@ type Environment struct {
 - 宣言（:= / type / 引数束縛）は Set（現在スコープ）
 - 更新（= / ++ / --）は Assign（親をたどって最初の変数を更新）
 
-# 13.3 スクリプト単位Env
+# 13.3 embed API（実装済み）
 
-- スクリプトごとに独立Env
-- ファイル間共有なし
+ルートパッケージ `ruli` がホスト向けの公開 API を持つ:
+
+```go
+s := ruli.New()
+s.SetOutput(buf)                       // print の出力先
+s.SetFunction("hello", "STRING", func(args ...ruli.Value) (ruli.Value, error) {
+	return ruli.NewStringValue("hello " + args[0].Inspect()), nil
+})                                     // ホスト関数登録
+err := s.RunString(`x := hello(42)`)
+err = s.RunFile("script.ruli")
+```
+
+- 実行環境と checker のシンボル環境は呼び出し間で共有（段階的に駆動できる）
+- `SetFunction`: 引数の個数・型はホスト側が検証（ruli からは可変長）。戻り値型は静的検査に使われ、不正な型名は登録時にエラー
+- スクリプト内で同名の関数を定義するとホスト関数より優先される
+- 値コンストラクタ: `NewIntValue` / `NewRealValue` / `NewBoolValue` / `NewStringValue` / `NewArrayValue` / `NewStructValue` / `NewNullValue`
+- エラーは `行:列` 形式（parse / 型検査 / 実行時）。複数エラーは改行連結
+- CLI `cmd/ruli` もこの API 上に実装されている
 
 # 14. 実装フェーズ
 

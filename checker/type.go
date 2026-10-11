@@ -8,9 +8,10 @@ type Type struct {
 	Name string
 
 	// 関数型のシグネチャ (Name == FUNCTION のときのみ有効)
-	Params  []Type
-	Refs    []bool  // Params[i] が ref パラメータか (SPEC 8.1)
-	Returns []*Type // 複数戻り値 (SPEC 5.3)。空なら戻り値なし
+	Params   []Type
+	Refs     []bool  // Params[i] が ref パラメータか (SPEC 8.1)
+	Returns  []*Type // 複数戻り値 (SPEC 5.3)。空なら戻り値なし
+	Variadic bool    // ホスト関数 (embed API) の引数は個数・型不定。ホスト側が検証する
 
 	// 配列の要素型 (Name == ARRAY のときのみ有効)
 	Elem   *Type

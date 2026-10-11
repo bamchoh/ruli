@@ -15,6 +15,7 @@ ruli（瑠璃）is an embeddable, statically-typed AST-interpreter scripting lan
 - Run one package's tests: `go test ./parser` (or `./lexer`)
 - Run a single test: `go test ./parser -run TestParserName`
 - Run a script: `go run ./cmd/ruli script.ruli` (or build once with `go build -o ruli.exe ./cmd/ruli`, then `./ruli.exe script.ruli`)
+- Embed in a Go host: root package `ruli` (see `ruli.go`) — `ruli.New()` → `SetOutput` / `SetFunction(name, returnType, fn)` / `RunString` / `RunFile`. The evaluator environment and the checker's symbol env persist across `RunString` calls on one `Script`
 
 CI (`.github/workflows/go.yml`) runs build + `go test ./...` on Go 1.25 for pushes/PRs to main. There are no linters configured.
 
