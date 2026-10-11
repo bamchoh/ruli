@@ -83,7 +83,6 @@ func (t *Type) Equal(other *Type) bool {
 				return false
 			}
 		}
-	case MULTI_TYPE.Name:
 		if len(t.Returns) != len(other.Returns) {
 			return false
 		}
@@ -198,6 +197,19 @@ func (t *Type) String() string {
 		if t.Elem != nil {
 			return fmt.Sprintf("%s[]", t.Elem.String())
 		}
+	case FUNCTION_TYPE.Name:
+		params := ""
+		for i := range t.Params {
+			if i > 0 {
+				params += ", "
+			}
+			params += t.Params[i].String()
+		}
+		out := "FUNC(" + params + ")"
+		for _, r := range t.Returns {
+			out += " " + r.String()
+		}
+		return out
 	}
 	return t.Name
 }
