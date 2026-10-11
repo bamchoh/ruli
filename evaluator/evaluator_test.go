@@ -1075,3 +1075,74 @@ call2(square, 7)`,
 		t,
 	)
 }
+
+func TestStringTypeRuntime(t *testing.T) {
+	// 宣言 + 初期化の超過は実行時エラー
+	testEvalError(
+		`s : STRING(3) = "abcd"`,
+		"string length 4 exceeds STRING(3)",
+		t,
+	)
+	// 変数値の代入も超過はエラー
+	testEvalError(
+		`other := "hello"
+s : STRING(3)
+s = other`,
+		"string length 5 exceeds STRING(3)",
+		t,
+	)
+
+	// 上限内は正常に動作する
+	evaluated := testEval(`s : STRING(3)
+s = "xy"
+s`)
+	if isError(evaluated) {
+		t.Fatalf("unexpected error: %s", evaluated.Inspect())
+	}
+	if got := evaluated.(*object.String).Value; got != "xy" {
+		t.Fatalf("wrong value. got=%q", got)
+	}
+
+	// ゼロ値は空文字 (len 0)
+	testEvalInteger(
+		`s : STRING(3)
+len(s)`,
+		0,
+		t,
+	)
+
+	// struct フィールドへの超過代入
+	testEvalError(
+		`type User struct {
+	id: STRING(3)
+}
+
+u := User{}
+u.id = "hello"`,
+		"string length 5 exceeds STRING(3)",
+		t,
+	)
+
+	// ref パラメータの束縛超過
+	testEvalError(
+		`func set(s: ref STRING(2)) BOOL {
+	return true
+}
+other := "hello"
+set(other)`,
+		"string length 5 exceeds STRING(2)",
+		t,
+	)
+
+	// ref パラメータ書き戻しの超過 (関数内で長くして返す)
+	testEvalError(
+		`func grow(s: ref STRING(2)) BOOL {
+	s = "abcdef"
+	return true
+}
+short := "ab"
+grow(short)`,
+		"string length 6 exceeds STRING(2)",
+		t,
+	)
+}

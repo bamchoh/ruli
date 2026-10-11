@@ -1424,3 +1424,37 @@ func TestFuncTypeNestedAndMultiReturnParse(t *testing.T) {
 		t.Fatalf("multi return not as expected. got=%d", len(pt.Returns))
 	}
 }
+
+func TestStringTypeParse(t *testing.T) {
+	l := lexer.New(`s : STRING(20)`)
+	p := New(l)
+	program := p.ParseProgram()
+	if len(p.Errors()) != 0 {
+		t.Fatalf("unexpected parse errors: %v", p.Errors())
+	}
+
+	decl := program.Statements[0].(*ast.VarDeclStatement)
+	st, ok := decl.Type.(*ast.StringType)
+	if !ok {
+		t.Fatalf("decl.Type not *ast.StringType. got=%T", decl.Type)
+	}
+	if st.Max != 20 {
+		t.Fatalf("st.Max not 20. got=%d", st.Max)
+	}
+	if st.String() != "STRING(20)" {
+		t.Fatalf("String() not STRING(20). got=%s", st.String())
+	}
+}
+
+func TestStringTypeParseErrors(t *testing.T) {
+	testParseErrors(
+		`s : STRING(0)`,
+		[]string{"STRING length must be positive, got 0"},
+		t,
+	)
+	testParseErrors(
+		`s : STRING(x)`,
+		[]string{"STRING length must be an integer literal, got 'x'"},
+		t,
+	)
+}

@@ -124,13 +124,21 @@ func Eval(node ast.Node, env *object.Environment) object.Object {
 			)
 		}
 
-		// 型名が明示された宣言は実行時幅チェックの対象になる (x : INT = 10)
-		if basic, ok := node.Type.(*ast.BasicType); ok {
-			if errObj := checkWidth(node, basic.Name, val); errObj != nil {
-				return errObj
+		// 型名が明示された宣言は実行時幅/文字列長チェックの対象になる
+		if node.Type != nil {
+			typeName, strMax := declaredTypeInfo(node.Type)
+			if typeName != "" {
+				if errObj := checkWidth(node, typeName, val); errObj != nil {
+					return errObj
+				}
+				if strMax > 0 {
+					if errObj := checkStringWidth(node, strMax, val); errObj != nil {
+						return errObj
+					}
+				}
+				env.DeclareTyped(node.Name.Value, bindValue(val), typeName)
+				return nullObject
 			}
-			env.DeclareTyped(node.Name.Value, bindValue(val), basic.Name)
-			return nullObject
 		}
 
 		env.Set(node.Name.Value, bindValue(val))
@@ -1052,6 +1060,10 @@ func zeroValueForTypeNode(node ast.TypeNode, env *object.Environment) object.Obj
 		}
 		return &object.Array{Elements: elements}
 
+	case *ast.StringType:
+		// SPEC 11: STRING(n) のゼロ値は空文字
+		return &object.String{}
+
 	case *ast.BasicType:
 		return zeroValue(env, t.Name)
 	}
@@ -1202,8 +1214,14 @@ func applyFunction(
 		// ref パラメータ (SPEC 8.1 / IEC VAR_IN_OUT) は引数を共有する。
 		// 配列 / struct はエイリアスで即時反映、スカラーは終了時に書き戻す
 		if param.Ref {
-			if bt, ok := param.Type.(*ast.BasicType); ok {
-				extendedEnv.DeclareTyped(param.Name, args[i], bt.Name)
+			typeName, strMax := declaredTypeInfo(param.Type)
+			if typeName != "" {
+				if strMax > 0 {
+					if errObj := checkStringWidth(fn.Body, strMax, args[i]); errObj != nil {
+						return errObj
+					}
+				}
+				extendedEnv.DeclareTyped(param.Name, args[i], typeName)
 				continue
 			}
 			extendedEnv.Set(param.Name, args[i])
@@ -1212,12 +1230,18 @@ func applyFunction(
 
 		stored := bindValue(args[i])
 
-		// 型付きパラメータは実行時幅チェックと型名の記録を行う
-		if bt, ok := param.Type.(*ast.BasicType); ok {
-			if errObj := checkWidth(fn.Body, bt.Name, stored); errObj != nil {
+		// 型付きパラメータは実行時幅/文字列長チェックと型名の記録を行う
+		typeName, strMax := declaredTypeInfo(param.Type)
+		if typeName != "" {
+			if errObj := checkWidth(fn.Body, typeName, stored); errObj != nil {
 				return errObj
 			}
-			extendedEnv.DeclareTyped(param.Name, stored, bt.Name)
+			if strMax > 0 {
+				if errObj := checkStringWidth(fn.Body, strMax, stored); errObj != nil {
+					return errObj
+				}
+			}
+			extendedEnv.DeclareTyped(param.Name, stored, typeName)
 			continue
 		}
 
@@ -1230,7 +1254,9 @@ func applyFunction(
 	}
 
 	// スカラー ref パラメータの書き戻し (正常終了時のみ)
-	writeBackRefs(fn, callNode, callEnv, extendedEnv)
+	if errObj := writeBackRefs(fn, callNode, callEnv, extendedEnv); errObj != nil {
+		return errObj
+	}
 
 	if rv, ok := result.(*object.ReturnValue); ok {
 		if len(rv.Values) == 1 {
@@ -1298,10 +1324,15 @@ func evalAssignStatement(
 		// = は宣言ではなく更新。未定義変数への代入は SPEC 4.1.1 でエラー
 		stored := bindValue(val)
 
-		// 宣言時に型が明示された変数は実行時幅チェックを行う
+		// 宣言時に型が明示された変数は実行時幅/文字列長チェックを行う
 		if typeName, ok := env.VarType(left.Value); ok {
 			if errObj := checkWidth(stmt, typeName, stored); errObj != nil {
 				return errObj
+			}
+			if strMax := stringMaxOfTypeName(typeName); strMax > 0 {
+				if errObj := checkStringWidth(stmt, strMax, stored); errObj != nil {
+					return errObj
+				}
 			}
 		}
 
@@ -1415,8 +1446,14 @@ func evalSelectorWrite(
 		return newErrorAtNode(left, "undefined field: %s", left.Field)
 	}
 
-	// フィールドが固定幅型なら実行時幅チェックする
-	if parentType := typeNameOfExpr(left.Object, env); parentType != "" {
+	// フィールドが固定幅型なら実行時幅/文字列長チェックする。
+	// 親の型名は宣言型から、なければ値が保持する struct 型名から解決する
+	// (u := User{...} のような型推論束縛)
+	parentType := typeNameOfExpr(left.Object, env)
+	if parentType == "" {
+		parentType = s.TypeName
+	}
+	if parentType != "" {
 		if def, ok := env.GetTypeDef(parentType); ok {
 			if fieldType, ok := def.FieldTypes[left.Field]; ok {
 				stored := mutate(old)
@@ -1425,6 +1462,11 @@ func evalSelectorWrite(
 				}
 				if errObj := checkWidth(left, basicTypeName(fieldType), stored); errObj != nil {
 					return errObj
+				}
+				if st, ok := fieldType.(*ast.StringType); ok {
+					if errObj := checkStringWidth(left, st.Max, stored); errObj != nil {
+						return errObj
+					}
 				}
 				s.Fields[left.Field] = stored
 				return stored
@@ -1484,7 +1526,7 @@ func writeBackRefs(
 	callNode *ast.CallExpression,
 	callEnv *object.Environment,
 	fnEnv *object.Environment,
-) {
+) object.Object {
 
 	for i, param := range fn.Parameters {
 		if !param.Ref || i >= len(callNode.Arguments) {
@@ -1503,27 +1545,41 @@ func writeBackRefs(
 			continue
 		}
 
+		// STRING(n) パラメータの書き戻しは長さを検査する
 		if i >= len(callNode.Arguments) {
 			continue
 		}
 
 		arg := callNode.Arguments[i]
+
+		if st, ok := param.Type.(*ast.StringType); ok {
+			if errObj := checkStringWidth(arg, st.Max, value); errObj != nil {
+				return errObj
+			}
+		}
+
 		switch target := arg.(type) {
 
 		case *ast.Identifier:
 			callEnv.Assign(target.Value, value)
 
 		case *ast.SelectorExpression:
-			evalSelectorWrite(target, callEnv, func(old object.Object) object.Object {
+			if res := evalSelectorWrite(target, callEnv, func(old object.Object) object.Object {
 				return value
-			})
+			}); isError(res) {
+				return res
+			}
 
 		case *ast.IndexExpression:
-			evalIndexWrite(target, callEnv, func(old object.Object) object.Object {
+			if res := evalIndexWrite(target, callEnv, func(old object.Object) object.Object {
 				return value
-			})
+			}); isError(res) {
+				return res
+			}
 		}
 	}
+
+	return nil
 }
 
 func evalIndexAssign(

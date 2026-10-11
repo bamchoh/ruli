@@ -355,6 +355,7 @@ func (c *Checker) checkVarDecl(stmt *ast.VarDeclStatement, env *Env) {
 			}
 
 			c.checkLiteralRange(dt.Name, stmt.Value)
+			c.checkStringLength(dt, stmt.Value)
 			env.Set(name, dt)
 		} else {
 			env.Set(name, vt)
@@ -390,6 +391,9 @@ func (c *Checker) checkAssign(stmt *ast.AssignStatement, env *Env) {
 			return
 		}
 
+		// STRING(n) へのリテラル代入は長さを静的に検査する
+		c.checkStringLength(declared, stmt.Value)
+
 		if !declared.Equal(vt) {
 			c.errAt(
 				stmt.GetToken(),
@@ -407,8 +411,9 @@ func (c *Checker) checkAssign(stmt *ast.AssignStatement, env *Env) {
 			return
 		}
 
-		// 固定幅要素へのリテラル代入は範囲を静的に検査する
+		// 固定幅要素へのリテラル代入は静的に検査する (数値の値域 / 文字列の長さ)
 		c.checkLiteralRange(elem.Name, stmt.Value)
+		c.checkStringLength(elem, stmt.Value)
 
 		vt := c.checkExpr(stmt.Value, env)
 		if vt != nil && !elem.Equal(vt) {
@@ -911,6 +916,27 @@ func (c *Checker) checkLiteralRange(typeName string, valueExpr ast.Expression) {
 	c.checkIntRange(typeName, int64(lit.Value), lit.GetToken())
 }
 
+// checkStringLength は STRING(n) へのリテラル代入の長さを静的に検査する (SPEC 11)
+func (c *Checker) checkStringLength(t *Type, expr ast.Expression) {
+	if t == nil || t.Name != STRING_TYPE.Name || t.StrMax <= 0 {
+		return
+	}
+
+	lit, ok := expr.(*ast.StringLiteral)
+	if !ok {
+		return // リテラル以外 (変数など) は実行時に検査する
+	}
+
+	if n := len([]rune(lit.Value)); n > t.StrMax {
+		c.errAt(
+			lit.GetToken(),
+			"string length %d exceeds STRING(%d)",
+			n,
+			t.StrMax,
+		)
+	}
+}
+
 func (c *Checker) checkIntRange(typeName string, value int64, token lexer.Token) {
 	w, ok := object.WidthOf(typeName)
 	if !ok {
@@ -951,6 +977,8 @@ func (c *Checker) resolveTypeNode(node ast.TypeNode) *Type {
 			return nil
 		}
 		return &Type{Name: ARRAY_TYPE.Name, Elem: elem, ArrLen: n.Size}
+	case *ast.StringType:
+		return &Type{Name: STRING_TYPE.Name, StrMax: n.Max}
 	case *ast.FuncType:
 		// 関数型 (SPEC 5.7) はシグネチャ一致で検査される
 		params, refs := c.paramTypes(n.Parameters)
@@ -1409,8 +1437,9 @@ func (c *Checker) checkStructLiteral(e *ast.StructLiteral, env *Env) *Type {
 		}
 		seen[field.Name] = true
 
-		// 固定幅フィールドへのリテラルは範囲を静的に検査する
+		// 固定幅フィールドへのリテラルは静的に検査する (数値の値域 / 文字列の長さ)
 		c.checkLiteralRange(ft.Name, field.Value)
+		c.checkStringLength(ft, field.Value)
 
 		vt := c.checkExpr(field.Value, env)
 		if vt != nil && !ft.Equal(vt) {

@@ -388,6 +388,10 @@ func (p *Parser) parseType() ast.TypeNode {
 
 	case lexer.IDENT:
 		// distinct type / struct名 将来対応
+		// STRING(n) のみ特別扱い (SPEC 11 の固定上限文字列型)
+		if p.curToken.Literal == "STRING" && p.peekToken.Type == lexer.LPAREN {
+			return p.parseStringType()
+		}
 		return &ast.BasicType{Token: p.curToken, Name: p.curToken.Literal}
 
 	case lexer.LBRACKET:
@@ -402,6 +406,54 @@ func (p *Parser) parseType() ast.TypeNode {
 func isFuncTypeToken(tok lexer.Token) bool {
 	return tok.Type == lexer.FUNC ||
 		(tok.Type == lexer.IDENT && tok.Literal == "FUNC")
+}
+
+// parseStringType は STRING(n) のような最大長つき文字列型をパースする (SPEC 11)
+func (p *Parser) parseStringType() ast.TypeNode {
+	token := p.curToken
+
+	if !p.expectPeek(lexer.LPAREN) {
+		return nil
+	}
+	p.nextToken() // (
+	p.nextToken() // length literal
+
+	if p.curToken.Type != lexer.INT_LIT {
+		p.errorAt(p.curToken, "STRING length must be an integer literal, got '%s'", tokenLabel(p.curToken))
+		return p.stringTypeErrorRecovery(token)
+	}
+
+	max, err := strconv.Atoi(p.curToken.Literal)
+	if err != nil {
+		p.errorAt(p.curToken, "invalid STRING length '%s'", p.curToken.Literal)
+		return p.stringTypeErrorRecovery(token)
+	}
+	if max <= 0 {
+		p.errorAt(p.curToken, "STRING length must be positive, got %d", max)
+		return p.stringTypeErrorRecovery(token)
+	}
+
+	if !p.expectPeek(lexer.RPAREN) {
+		return p.stringTypeErrorRecovery(token)
+	}
+
+	p.nextToken() // ) を消費
+
+	return &ast.StringType{
+		Token: token,
+		Max:   max,
+	}
+}
+
+// stringTypeErrorRecovery は STRING(n) の型エラー後の復帰。
+// ) まで読み飛ばして消費し、部分型 (無制限 STRING) を返して
+// 呼び出し側の "unknown type" 重複報告を抑える
+func (p *Parser) stringTypeErrorRecovery(token lexer.Token) ast.TypeNode {
+	p.syncTo(lexer.RPAREN)
+	if p.curToken.Type == lexer.RPAREN {
+		p.nextToken() // ) を消費
+	}
+	return &ast.StringType{Token: token, Max: 0}
 }
 
 // parseFuncType は FUNC(x: INT) INT のような関数型をパースする (SPEC 5.7)。

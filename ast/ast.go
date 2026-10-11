@@ -232,6 +232,22 @@ func (ft *FuncType) GetToken() lexer.Token {
 	return ft.Token
 }
 
+// StringType は STRING(n) のような最大長つき文字列型 (SPEC 11)
+type StringType struct {
+	Token lexer.Token
+	Max   int // 最大長 (ルーン基準、常に 1 以上)
+}
+
+func (st *StringType) typeNode() {}
+
+func (st *StringType) String() string {
+	return fmt.Sprintf("STRING(%d)", st.Max)
+}
+
+func (st *StringType) GetToken() lexer.Token {
+	return st.Token
+}
+
 type BasicType struct {
 	Token lexer.Token
 	Name  string

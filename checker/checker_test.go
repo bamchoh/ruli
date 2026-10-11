@@ -994,3 +994,46 @@ x()`,
 		t,
 	)
 }
+
+func TestCheckStringTypeValid(t *testing.T) {
+	input := `name : STRING(20)
+short : STRING(3) = "abc"
+plain : STRING = ""
+
+type User struct {
+	id:      STRING(10)
+	remarks: STRING
+}
+
+u := User{id: "u-001"}
+other := "long string here"
+name = other
+ok := name < other`
+	if errs := Check(parseInput(input)); len(errs) > 0 {
+		t.Fatalf("unexpected errors: %v", errs)
+	}
+}
+
+func TestCheckStringTypeStaticErrors(t *testing.T) {
+	testCheckErrors(
+		`s : STRING(3) = "abcd"`,
+		[]string{"string length 4 exceeds STRING(3)"},
+		t,
+	)
+	testCheckErrors(
+		`type User struct {
+	id: STRING(3)
+}
+
+u := User{id: "hello"}`,
+		[]string{"string length 5 exceeds STRING(3)"},
+		t,
+	)
+	testCheckErrors(
+		`s : STRING(2) = "ab"
+s = "abcd"`,
+		[]string{"string length 4 exceeds STRING(2)"},
+		t,
+	)
+
+}
