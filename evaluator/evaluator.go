@@ -595,6 +595,14 @@ func evalStringInfixExpression(
 	switch operator {
 	case "+":
 		return &object.String{Value: lv + rv}
+	case "<":
+		return nativeBoolToBooleanObject(lv < rv)
+	case "<=":
+		return nativeBoolToBooleanObject(lv <= rv)
+	case ">":
+		return nativeBoolToBooleanObject(lv > rv)
+	case ">=":
+		return nativeBoolToBooleanObject(lv >= rv)
 	case "==":
 		return nativeBoolToBooleanObject(lv == rv)
 	case "!=":
@@ -1241,9 +1249,27 @@ func evalIndexExpression(node *ast.IndexExpression, left, index object.Object) o
 		index.Type() == object.INTEGER_OBJ:
 
 		return evalArrayIndexExpression(node, left, index)
+
+	case left.Type() == object.STRING_OBJ &&
+		index.Type() == object.INTEGER_OBJ:
+
+		return evalStringIndexExpression(node, left, index)
 	}
 
 	return newErrorAtNode(node, "not an array")
+}
+
+// evalStringIndexExpression は文字列の 1 文字を STRING として返す (ルーン基準)
+func evalStringIndexExpression(node *ast.IndexExpression, str, index object.Object) object.Object {
+
+	runes := []rune(str.(*object.String).Value)
+	idx := index.(*object.Integer).Value
+
+	if idx < 0 || idx >= len(runes) {
+		return newErrorAtNode(node, "index out of range: %d", idx)
+	}
+
+	return &object.String{Value: string(runes[idx])}
 }
 
 func evalArrayIndexExpression(node *ast.IndexExpression, array, index object.Object) object.Object {

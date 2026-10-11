@@ -197,3 +197,30 @@ func TestRealLiteralTokens(t *testing.T) {
 		}
 	}
 }
+
+func TestExponentLiterals(t *testing.T) {
+	input := "1e5 2.5e-3 1E2 42 exit 1e"
+	tests := []struct {
+		expectedType    TokenType
+		expectedLiteral string
+	}{
+		{REAL_LIT, "1e5"},
+		{REAL_LIT, "2.5e-3"},
+		{REAL_LIT, "1E2"},
+		{INT_LIT, "42"},
+		// digit が続かない指数は IDENT になる (1e は 1 と e に分かれる)
+		{IDENT, "exit"},
+		{INT_LIT, "1"},
+		{IDENT, "e"},
+		{EOF, ""},
+	}
+
+	l := New(input)
+	for i, tt := range tests {
+		tok := l.NextToken()
+		if tok.Type != tt.expectedType || tok.Literal != tt.expectedLiteral {
+			t.Fatalf("tests[%d] wrong. expected=%q(%q) got=%q(%q)",
+				i, tt.expectedType, tt.expectedLiteral, tok.Type, tok.Literal)
+		}
+	}
+}

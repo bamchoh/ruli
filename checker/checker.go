@@ -1008,6 +1008,20 @@ func (c *Checker) checkExpr(expr ast.Expression, env *Env) *Type {
 			return nil
 		}
 
+		// 文字列のインデックスアクセスは 1 文字 (STRING) を返す
+		if array.Name == STRING_TYPE.Name {
+			index := c.checkExpr(e.Index, env)
+			if index != nil && index.Name != INT_TYPE.Name {
+				c.errAt(
+					e.Index.GetToken(),
+					"index must be INT, got %s",
+					index.Name,
+				)
+				return nil
+			}
+			return STRING_TYPE
+		}
+
 		if array.Name != ARRAY_TYPE.Name && array.Name != ANY_TYPE.Name {
 			c.errAt(e.GetToken(), "not an array")
 			return nil
@@ -1176,8 +1190,8 @@ func (c *Checker) checkOperation(lt *Type, operator string, rt *Type, token lexe
 		if !lt.Equal(rt) {
 			break
 		}
-		// SPEC 11: 文字列の < > 比較は非対応
-		if isNumeric(lt) {
+		// 数値族または文字列 (辞書順)
+		if isNumeric(lt) || lt.Name == STRING_TYPE.Name {
 			return BOOL_TYPE
 		}
 

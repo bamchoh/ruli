@@ -78,9 +78,10 @@ func TestBinaryExpressionTypeMismatch(t *testing.T) {
 }
 
 func TestUnsupportedOperator(t *testing.T) {
+	// && / || は BOOL のみ (文字列はビット演算不可)
 	testEvalError(
-		`"a" < "b"`,
-		"unsupported operator: <",
+		`"a" && true`,
+		"operand of && must be BOOL, got STRING",
 		t,
 	)
 }
@@ -979,6 +980,45 @@ d.motor.setSpeed(7)
 d.motor.stop()
 d.motor.speed`,
 		0,
+		t,
+	)
+}
+
+func TestStringComparisons(t *testing.T) {
+	testEvalBool(`"a" < "b"`, true, t)
+	testEvalBool(`"b" <= "b"`, true, t)
+	testEvalBool(`"b" > "a"`, true, t)
+	testEvalBool(`"b" >= "c"`, false, t)
+	testEvalBool(`"abc" < "abd"`, true, t)
+	// ルーン基準の辞書順 (マルチバイト)
+	testEvalBool(`"あ" < "い"`, true, t)
+}
+
+func TestExponentLiterals(t *testing.T) {
+	testEvalReal(`1e5`, 100000.0, t)
+	testEvalReal(`2.5e-3`, 0.0025, t)
+	testEvalReal(`1E2 + 0.5`, 100.5, t)
+	testEvalInteger(`DINT(1e5)`, 100000, t)
+}
+
+func TestStringIndexExpr(t *testing.T) {
+	evaluated := testEval(`greeting := "こんにちは"
+greeting[0]`)
+	if isError(evaluated) {
+		t.Fatalf("unexpected error: %s", evaluated.Inspect())
+	}
+	result, ok := evaluated.(*object.String)
+	if !ok {
+		t.Fatalf("object is not String. got=%T", evaluated)
+	}
+	if result.Value != "こ" {
+		t.Fatalf("wrong char. got=%q", result.Value)
+	}
+
+	testEvalError(
+		`s := "abc"
+s[3]`,
+		"index out of range: 3",
 		t,
 	)
 }

@@ -911,3 +911,29 @@ m.set(1, 2)`,
 		t,
 	)
 }
+
+func TestCheckStringExtensions(t *testing.T) {
+	for _, input := range []string{
+		`ok := "a" < "b"`,
+		`ok := "a" <= "a"`,
+		`ok := "b" >= "a"`,
+		`x := 1e5`,
+		`x : REAL = 2.5e-3`,
+		`s := "hello"
+c := s[0]`,
+	} {
+		if errs := Check(parseInput(input)); len(errs) > 0 {
+			t.Fatalf("unexpected errors (%q): %v", input, errs)
+		}
+	}
+}
+
+func TestCheckStringIndexAssign(t *testing.T) {
+	// 文字列へのインデックス代入は不可 (不変値)
+	testCheckErrors(
+		`s := "abc"
+s[0] = "x"`,
+		[]string{"not an array"},
+		t,
+	)
+}

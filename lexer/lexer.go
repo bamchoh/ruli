@@ -201,8 +201,8 @@ func (l *Lexer) NextToken() Token {
 			return tok
 		} else if isDigit(l.ch) {
 			lit := l.readNumber()
-			if strings.ContainsRune(lit, '.') {
-				// 実数リテラル (SPEC 4.1 の REAL / LREAL)
+			if strings.ContainsAny(lit, ".eE") {
+				// 実数リテラル (SPEC 4.1 の REAL / LREAL、指数表記を含む)
 				return l.newToken(REAL_LIT, lit)
 			}
 			return l.newToken(INT_LIT, lit)
@@ -278,6 +278,31 @@ func (l *Lexer) readNumber() string {
 		l.readChar()
 		for isDigit(l.ch) {
 			l.readChar()
+		}
+	}
+
+	// 指数表記 (1e5 / 2.5e-3)。digit が続かない場合は読み進めない
+	// (1exit のような IDENT との混在を避ける)
+	if l.ch == 'e' || l.ch == 'E' {
+		expDigitFollows := false
+
+		if l.readPosition < len(l.input) && isDigit(l.peekChar()) {
+			expDigitFollows = true
+		} else if l.readPosition < len(l.input) &&
+			(l.peekChar() == '+' || l.peekChar() == '-') &&
+			l.readPosition+1 < len(l.input) &&
+			isDigit(l.input[l.readPosition+1]) {
+			expDigitFollows = true
+		}
+
+		if expDigitFollows {
+			l.readChar() // e
+			if l.ch == '+' || l.ch == '-' {
+				l.readChar()
+			}
+			for isDigit(l.ch) {
+				l.readChar()
+			}
 		}
 	}
 
