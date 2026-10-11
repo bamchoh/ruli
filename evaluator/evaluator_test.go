@@ -1022,3 +1022,56 @@ s[3]`,
 		t,
 	)
 }
+
+func TestHigherOrderFunctions(t *testing.T) {
+	testEvalInteger(
+		`func apply(fn: FUNC(x: INT) INT, v: INT) INT {
+	return fn(v)
+}
+func double(x: INT) INT {
+	return x * 2
+}
+apply(double, 21)`,
+		42,
+		t,
+	)
+	// 変数格納後に呼び出し
+	testEvalInteger(
+		`func double(x: INT) INT {
+	return x * 2
+}
+g := double
+g(10)`,
+		20,
+		t,
+	)
+	// 呼び出し結果からの呼び出し
+	testEvalInteger(
+		`func pick(flag: BOOL) FUNC(x: INT) INT {
+	if flag {
+		return double
+	}
+	return neg
+}
+func double(x: INT) INT {
+	return x * 2
+}
+func neg(x: INT) INT {
+	return -x
+}
+pick(false)(4)`,
+		-4,
+		t,
+	)
+	testEvalInteger(
+		`func call2(fn: FUNC(x: INT) INT, v: INT) INT {
+	return fn(v)
+}
+func square(x: INT) INT {
+	return x * x
+}
+call2(square, 7)`,
+		49,
+		t,
+	)
+}

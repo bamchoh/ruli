@@ -726,36 +726,49 @@ func (c *Checker) checkReturn(stmt *ast.ReturnStatement, env *Env) {
 
 // signatureOf は宣言からシグネチャ型を作る (環境登録はしない)
 func (c *Checker) signatureOf(stmt *ast.FunctionStatement) *Type {
-	params := make([]Type, 0, len(stmt.Parameters))
-	refs := make([]bool, 0, len(stmt.Parameters))
+	params, refs := c.paramTypes(stmt.Parameters)
+	returns := c.resolveReturnTypes(stmt.ReturnTypes)
 
-	for _, param := range stmt.Parameters {
+	return &Type{Name: FUNCTION_TYPE.Name, Params: params, Refs: refs, Returns: returns}
+}
+
+// paramTypes はパラメータ宣言から型のリストを作る
+func (c *Checker) paramTypes(params []ast.Parameter) ([]Type, []bool) {
+	types := make([]Type, 0, len(params))
+	refs := make([]bool, 0, len(params))
+
+	for _, param := range params {
 		refs = append(refs, param.Ref)
 
 		if param.Type == nil {
-			params = append(params, *ANY_TYPE)
+			types = append(types, *ANY_TYPE)
 			continue
 		}
 
 		t := c.resolveTypeNode(param.Type)
 		if t == nil {
-			params = append(params, *ANY_TYPE)
+			types = append(types, *ANY_TYPE)
 			continue
 		}
-		params = append(params, *t)
+		types = append(types, *t)
 	}
 
-	returns := make([]*Type, 0, len(stmt.ReturnTypes))
-	for _, rt := range stmt.ReturnTypes {
+	return types, refs
+}
+
+// resolveReturnTypes は戻り値型宣言を解決する
+func (c *Checker) resolveReturnTypes(rts []ast.TypeNode) []*Type {
+	types := make([]*Type, 0, len(rts))
+	for _, rt := range rts {
 		t := c.resolveTypeNode(rt)
 		if t == nil {
-			returns = append(returns, UNKNOWN_TYPE)
+			types = append(types, UNKNOWN_TYPE)
 			continue
 		}
-		returns = append(returns, t)
+		types = append(types, t)
 	}
 
-	return &Type{Name: FUNCTION_TYPE.Name, Params: params, Refs: refs, Returns: returns}
+	return types
 }
 
 // registerFunctionSignature は関数のシグネチャ型を現在スコープに登録する
@@ -938,6 +951,11 @@ func (c *Checker) resolveTypeNode(node ast.TypeNode) *Type {
 			return nil
 		}
 		return &Type{Name: ARRAY_TYPE.Name, Elem: elem, ArrLen: n.Size}
+	case *ast.FuncType:
+		// 関数型 (SPEC 5.7) はシグネチャ一致で検査される
+		params, refs := c.paramTypes(n.Parameters)
+		returns := c.resolveReturnTypes(n.Returns)
+		return &Type{Name: FUNCTION_TYPE.Name, Params: params, Refs: refs, Returns: returns}
 	}
 
 	return nil
@@ -1266,7 +1284,7 @@ func (c *Checker) checkCall(e *ast.CallExpression, env *Env) *Type {
 	if ident, ok := e.Function.(*ast.Identifier); ok {
 		if t, found := env.Get(ident.Value); found {
 			if t.Name != FUNCTION_TYPE.Name {
-				c.errAt(e.GetToken(), "not a function: %s", ident.Value)
+				c.errAt(e.GetToken(), "not a function: %s", t.String())
 				return nil
 			}
 			fnType = t
@@ -1278,11 +1296,17 @@ func (c *Checker) checkCall(e *ast.CallExpression, env *Env) *Type {
 			return c.checkBuiltinCall(ident.Value, e, env)
 		}
 	} else {
-		c.errAt(
-			e.GetToken(),
-			"not a function",
-		)
-		return nil
+		// 呼び出し結果・括弧式などからの呼び出し: 式の関数型から検査する
+		// (pick(true)(4) のような高階利用)
+		ft := c.checkExpr(e.Function, env)
+		if ft == nil {
+			return nil
+		}
+		if ft.Name != FUNCTION_TYPE.Name {
+			c.errAt(e.GetToken(), "not a function: %s", ft.String())
+			return nil
+		}
+		fnType = ft
 	}
 
 	return c.checkCallArgs(e, env, fnType)
@@ -1342,7 +1366,7 @@ func (c *Checker) checkCallArgs(e *ast.CallExpression, env *Env, fnType *Type) *
 				"type mismatch: argument %d: expected %s, got %s",
 				i+1,
 				fnType.Params[i].String(),
-				argTypes[i].Name,
+				argTypes[i].String(),
 			)
 		}
 	}

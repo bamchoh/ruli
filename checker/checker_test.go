@@ -156,7 +156,7 @@ func TestCheckCallNonFunction(t *testing.T) {
 	testCheckErrors(
 		`x := 1
 x()`,
-		[]string{"not a function: x"},
+		[]string{"not a function: INT"},
 		t,
 	)
 }
@@ -934,6 +934,63 @@ func TestCheckStringIndexAssign(t *testing.T) {
 		`s := "abc"
 s[0] = "x"`,
 		[]string{"not an array"},
+		t,
+	)
+}
+
+func TestCheckHigherOrderFunctions(t *testing.T) {
+	input := `func apply(fn: FUNC(x: INT) INT, v: INT) INT {
+	return fn(v)
+}
+
+func double(x: INT) INT {
+	return x * 2
+}
+
+g := double
+apply(g, 10)
+
+func makeFn() FUNC(x: INT) INT {
+	return double
+}
+h := makeFn()
+h(2)
+
+func invoke(fn: FUNC(f: FUNC() INT) (INT, BOOL)) { return 0 }`
+	if errs := Check(parseInput(input)); len(errs) > 0 {
+		t.Fatalf("unexpected errors: %v", errs)
+	}
+}
+
+func TestCheckHigherOrderMismatch(t *testing.T) {
+	// シグネチャ不一致は静的エラー (メッセージは署名表示)
+	base := `func apply(fn: FUNC(x: INT) INT, v: INT) INT {
+	return fn(v)
+}
+
+func wrong(x: BOOL) INT {
+	return 0
+}
+
+func voidFn() {
+	print(1)
+}
+
+`
+	testCheckErrors(
+		base+`apply(wrong, 1)`,
+		[]string{"type mismatch: argument 1: expected FUNC(INT) INT, got FUNC(BOOL) INT"},
+		t,
+	)
+	testCheckErrors(
+		base+`apply(voidFn, 1)`,
+		[]string{"type mismatch: argument 1: expected FUNC(INT) INT, got FUNC()"},
+		t,
+	)
+	testCheckErrors(
+		base+`x := 1
+x()`,
+		[]string{"not a function: INT"},
 		t,
 	)
 }

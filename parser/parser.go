@@ -365,6 +365,11 @@ func (p *Parser) parseVarDeclStatement() *ast.VarDeclStatement {
 
 func (p *Parser) parseType() ast.TypeNode {
 
+	// 関数型 (SPEC 5.7): 型位置では `func` / `FUNC` どちらも関数型
+	if isFuncTypeToken(p.curToken) {
+		return p.parseFuncType()
+	}
+
 	switch p.curToken.Type {
 
 	case lexer.REF:
@@ -390,6 +395,99 @@ func (p *Parser) parseType() ast.TypeNode {
 	}
 
 	return nil
+}
+
+// isFuncTypeToken は型位置で関数型の開始トークンか
+// (keyword `func` と、識別子扱いになる大文字 `FUNC` の両方)
+func isFuncTypeToken(tok lexer.Token) bool {
+	return tok.Type == lexer.FUNC ||
+		(tok.Type == lexer.IDENT && tok.Literal == "FUNC")
+}
+
+// parseFuncType は FUNC(x: INT) INT のような関数型をパースする (SPEC 5.7)。
+// パラメータは `名前: 型` が必須、戻り値型は省略可
+func (p *Parser) parseFuncType() ast.TypeNode {
+	token := p.curToken
+
+	fn := &ast.FuncType{
+		Token: token,
+	}
+
+	if !p.expectPeek(lexer.LPAREN) {
+		return fn
+	}
+
+	p.nextToken() // (
+	p.nextToken() // first param name or )
+
+	for p.curToken.Type != lexer.RPAREN && p.curToken.Type != lexer.EOF {
+		if p.curToken.Type == lexer.COMMA {
+			p.nextToken()
+			continue
+		}
+
+		if p.curToken.Type != lexer.IDENT {
+			p.errorAt(p.curToken, "expected parameter name, got '%s'", tokenLabel(p.curToken))
+			return fn
+		}
+
+		param := ast.Parameter{
+			Name: p.curToken.Literal,
+		}
+
+		if !p.expectPeek(lexer.COLON) {
+			return fn
+		}
+
+		p.nextToken() // :
+		p.nextToken() // type first token
+
+		param.Type = p.parseType()
+		if param.Type == nil {
+			p.errorAt(p.curToken, "unknown type '%s'", tokenLabel(p.curToken))
+		}
+
+		fn.Parameters = append(fn.Parameters, param)
+		p.nextToken() // next param or )
+	}
+
+	if p.curToken.Type == lexer.EOF {
+		p.errorAt(p.curToken, "expected ')', got EOF")
+		return fn
+	}
+
+	// 戻り値型省略可
+	if p.peekToken.Type == lexer.IDENT || p.peekToken.Type == lexer.LBRACKET ||
+		p.peekToken.Type == lexer.FUNC {
+		p.nextToken()
+		fn.Returns = []ast.TypeNode{p.parseType()}
+	}
+
+	// 複数戻り値型: (INT, BOOL)
+	if p.peekToken.Type == lexer.LPAREN {
+		p.nextToken() // (
+		p.nextToken() // first return type
+
+		for p.curToken.Type != lexer.RPAREN && p.curToken.Type != lexer.EOF {
+			if p.curToken.Type == lexer.COMMA {
+				p.nextToken()
+				continue
+			}
+
+			rt := p.parseType()
+			if rt == nil {
+				p.errorAt(p.curToken, "unknown type '%s'", tokenLabel(p.curToken))
+			}
+			fn.Returns = append(fn.Returns, rt)
+			p.nextToken() // next return type or )
+		}
+
+		if p.curToken.Type == lexer.EOF {
+			p.errorAt(p.curToken, "expected ')', got EOF")
+		}
+	}
+
+	return fn
 }
 
 // parseArrayType は [10]INT / [3][3]INT のような固定長配列型をパースする (SPEC 4.4)
@@ -1130,8 +1228,9 @@ func (p *Parser) parseFunctionStatement() *ast.FunctionStatement {
 	p.nextToken() // (
 	stmt.Parameters = p.parseFunctionParameters()
 
-	// 戻り値型省略可 (配列型 [4]INT も可)
-	if p.peekToken.Type == lexer.IDENT || p.peekToken.Type == lexer.LBRACKET {
+	// 戻り値型省略可 (関数型 FUNC(...) / 配列型 [4]INT も可)
+	if p.peekToken.Type == lexer.IDENT || p.peekToken.Type == lexer.LBRACKET ||
+		p.peekToken.Type == lexer.FUNC {
 		p.nextToken()
 		stmt.ReturnTypes = []ast.TypeNode{p.parseType()}
 	}

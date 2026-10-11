@@ -203,6 +203,35 @@ func (ce *CastExpression) GetToken() lexer.Token {
 	return ce.Token
 }
 
+// FuncType は FUNC(x: INT) INT のような関数型 (SPEC 5.7)
+type FuncType struct {
+	Token      lexer.Token
+	Parameters []Parameter
+	Returns    []TypeNode
+}
+
+func (ft *FuncType) typeNode() {}
+
+func (ft *FuncType) String() string {
+	var out strings.Builder
+	out.WriteString("FUNC(")
+	for i, p := range ft.Parameters {
+		if i > 0 {
+			out.WriteString(", ")
+		}
+		out.WriteString(p.Name + ": " + p.Type.String())
+	}
+	out.WriteString(")")
+	for _, rt := range ft.Returns {
+		out.WriteString(" " + rt.String())
+	}
+	return out.String()
+}
+
+func (ft *FuncType) GetToken() lexer.Token {
+	return ft.Token
+}
+
 type BasicType struct {
 	Token lexer.Token
 	Name  string

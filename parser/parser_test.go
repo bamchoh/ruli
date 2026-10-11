@@ -1382,3 +1382,45 @@ func TestMethodReceiverCountError(t *testing.T) {
 		t,
 	)
 }
+
+func TestFuncTypeParse(t *testing.T) {
+	input := `func apply(fn: FUNC(x: INT) INT, v: INT) INT { return fn(v) }`
+
+	l := lexer.New(input)
+	p := New(l)
+	program := p.ParseProgram()
+	if len(p.Errors()) != 0 {
+		t.Fatalf("unexpected parse errors: %v", p.Errors())
+	}
+
+	fn := program.Statements[0].(*ast.FunctionStatement)
+	pt := fn.Parameters[0].Type.(*ast.FuncType)
+	if len(pt.Parameters) != 1 || pt.Parameters[0].Name != "x" {
+		t.Fatalf("func type params not as expected")
+	}
+	if len(pt.Returns) != 1 || pt.Returns[0].String() != "INT" {
+		t.Fatalf("func type return not INT. got=%v", pt.Returns)
+	}
+	if pt.String() != "FUNC(x: INT) INT" {
+		t.Fatalf("String() not as expected. got=%s", pt.String())
+	}
+}
+
+func TestFuncTypeNestedAndMultiReturnParse(t *testing.T) {
+	l := lexer.New(`func h(cb: FUNC(f: FUNC() INT) (INT, BOOL)) INT { return 0 }`)
+	p := New(l)
+	program := p.ParseProgram()
+	if len(p.Errors()) != 0 {
+		t.Fatalf("unexpected parse errors: %v", p.Errors())
+	}
+
+	fn := program.Statements[0].(*ast.FunctionStatement)
+	pt := fn.Parameters[0].Type.(*ast.FuncType)
+	inner := pt.Parameters[0].Type.(*ast.FuncType)
+	if len(inner.Returns) != 1 {
+		t.Fatalf("inner return not as expected")
+	}
+	if len(pt.Returns) != 2 {
+		t.Fatalf("multi return not as expected. got=%d", len(pt.Returns))
+	}
+}
