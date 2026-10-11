@@ -179,6 +179,7 @@ func (c *ContinueSignal) Inspect() string  { return "continue" }
 
 type Function struct {
 	Parameters []ast.Parameter
+	Receiver   *ast.Parameter // メソッド (SPEC 5.6)。nil はトップレベル関数
 	Body       *ast.BlockStatement
 	Env        *Environment
 }
@@ -344,6 +345,9 @@ func (s *Struct) Copy() *Struct {
 type StructDef struct {
 	FieldNames []string
 	FieldTypes map[string]ast.TypeNode // フィールド名 → 型ノード
+
+	// メソッド (SPEC 5.6): struct 型の宣言に属する関数
+	Methods map[string]*Function
 
 	// distinct 型 (SPEC 4.2) のときは基本型名が入る (フィールドは空)
 	Base string

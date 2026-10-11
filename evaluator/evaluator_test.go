@@ -897,3 +897,88 @@ m.speed`,
 		t,
 	)
 }
+
+func TestMethods(t *testing.T) {
+	motor := `type Motor struct {
+	speed: INT
+}
+
+func (m: Motor) isStopped() BOOL {
+	return m.speed == 0
+}
+
+func (m: ref Motor) stop() BOOL {
+	m.speed = 0
+	return true
+}
+
+func (m: ref Motor) setSpeed(v: INT) BOOL {
+	m.speed = v
+	return v > 0
+}
+
+m : Motor
+`
+
+	testEvalInteger(
+		motor+`m.setSpeed(5)
+m.speed`,
+		5,
+		t,
+	)
+	testEvalBool(
+		motor+`m.setSpeed(5)
+m.isStopped()`,
+		false,
+		t,
+	)
+	testEvalInteger(
+		motor+`m.setSpeed(5)
+m.stop()
+m.speed`,
+		0,
+		t,
+	)
+	testEvalBool(
+		motor+`m.isStopped()`,
+		true,
+		t,
+	)
+	// 値渡しレシーバでは外に反映されない
+	testEvalInteger(
+		motor+`func (m: Motor) break_(v: INT) BOOL {
+	m.speed = v
+	return true
+}
+
+m.setSpeed(5)
+m.break_(99)
+m.speed`,
+		5,
+		t,
+	)
+	// ネストしたフィールドからの呼び出し
+	testEvalInteger(
+		`type Motor struct {
+	speed: INT
+}
+type Drive struct {
+	motor: Motor
+}
+func (m: ref Motor) stop() BOOL {
+	m.speed = 0
+	return true
+}
+func (m: ref Motor) setSpeed(v: INT) BOOL {
+	m.speed = v
+	return true
+}
+
+d : Drive
+d.motor.setSpeed(7)
+d.motor.stop()
+d.motor.speed`,
+		0,
+		t,
+	)
+}

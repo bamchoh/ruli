@@ -251,9 +251,28 @@ func Eval(node ast.Node, env *object.Environment) object.Object {
 	case *ast.FunctionStatement:
 		fn := &object.Function{
 			Parameters: node.Parameters,
+			Receiver:   node.Receiver,
 			Body:       node.Body,
 			Env:        env,
 		}
+
+		// メソッド (SPEC 5.6) は struct 型定義に登録する
+		if node.Receiver != nil {
+			if typeName := methodReceiverTypeName(node.Receiver); typeName != "" {
+				if def, ok := env.GetTypeDef(typeName); ok {
+					if def.Methods == nil {
+						def.Methods = make(map[string]*object.Function)
+					}
+					def.Methods[node.Name] = fn
+					return fn
+				}
+
+				return newErrorAtNode(node, "undefined struct type: %s", typeName)
+			}
+
+			return newErrorAtNode(node, "method receiver requires a type")
+		}
+
 		env.Set(node.Name, fn)
 		return fn
 
@@ -817,6 +836,13 @@ func evalPrefixExpression(node *ast.PrefixExpression, env *object.Environment) o
 
 func evalCallExpression(node *ast.CallExpression, env *object.Environment) object.Object {
 
+	// メソッド呼び出し (SPEC 5.6): m.reset()
+	if sel, ok := node.Function.(*ast.SelectorExpression); ok {
+		if result := evalMethodCall(node, sel, env); result != nil {
+			return result
+		}
+	}
+
 	// ユーザ定義型へのキャスト (SPEC 4.2): TEMP(30)
 	if ident, ok := node.Function.(*ast.Identifier); ok {
 		if _, isBuiltin := builtins[ident.Value]; !isBuiltin {
@@ -869,7 +895,7 @@ func evalCallExpression(node *ast.CallExpression, env *object.Environment) objec
 				len(fn.Parameters),
 			)
 		}
-		return applyFunction(fn, args, node, env)
+		return applyFunction(fn, args, node, env, nil, nil)
 	}
 
 	return newErrorAtNode(node, "not a function: %s", function.Type())
@@ -1055,14 +1081,94 @@ func isIntFamilyName(name string) bool {
 	return false
 }
 
+// evalMethodCall はメソッド呼び出しを解決して適用する。
+// メソッドが見つからない場合は nil を返す (通常の呼び出しにフォールバック)
+func evalMethodCall(
+	node *ast.CallExpression,
+	sel *ast.SelectorExpression,
+	env *object.Environment,
+) object.Object {
+
+	typeName := typeNameOfExpr(sel.Object, env)
+	if typeName == "" {
+		return nil
+	}
+
+	def, ok := env.GetTypeDef(typeName)
+	if !ok || def.Methods == nil {
+		return nil
+	}
+
+	method, ok := def.Methods[sel.Field]
+	if !ok {
+		return nil
+	}
+
+	recvObj := Eval(sel.Object, env)
+	if isError(recvObj) {
+		return recvObj
+	}
+
+	args := make([]object.Object, 0, len(node.Arguments))
+	for _, argExpr := range node.Arguments {
+		val := Eval(argExpr, env)
+		if isError(val) {
+			return val
+		}
+		args = append(args, val)
+	}
+
+	if len(args) != len(method.Parameters) {
+		return newErrorAtNode(
+			node,
+			"wrong number of arguments. got=%d, want=%d",
+			len(args),
+			len(method.Parameters),
+		)
+	}
+
+	// レシーバはレシーバスロットとして束縛する (Parameters には含まれない)
+	// レシーバはレシーバスロットとして束縛する (Parameters には含まれない)
+	return applyFunction(method, args, node, env, method.Receiver, recvObj)
+}
+
+// methodReceiverTypeName はメソッドレシーバの struct 型名を返す (解決できなければ "")
+func methodReceiverTypeName(recv *ast.Parameter) string {
+	if recv.Type == nil {
+		return ""
+	}
+	if bt, ok := recv.Type.(*ast.BasicType); ok {
+		return bt.Name
+	}
+	return ""
+}
+
 func applyFunction(
 	fn *object.Function,
 	args []object.Object,
 	callNode *ast.CallExpression,
 	callEnv *object.Environment,
+	receiverParam *ast.Parameter,
+	receiverVal object.Object,
 ) object.Object {
 
 	extendedEnv := object.NewEnclosedEnvironment(fn.Env)
+
+	// メソッドレシーバ (SPEC 5.6): 値渡し (コピー) / ref レシーバは共有
+	if receiverParam != nil {
+		var recvStored object.Object
+		if receiverParam.Ref {
+			recvStored = receiverVal
+		} else {
+			recvStored = bindValue(receiverVal)
+		}
+
+		extendedEnv.Set(receiverParam.Name, recvStored)
+
+		if bt, ok := receiverParam.Type.(*ast.BasicType); ok {
+			extendedEnv.DeclareTyped(receiverParam.Name, recvStored, bt.Name)
+		}
+	}
 
 	for i, param := range fn.Parameters {
 

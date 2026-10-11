@@ -408,6 +408,7 @@ type Parameter struct {
 type FunctionStatement struct {
 	Token       lexer.Token
 	Name        string
+	Receiver    *Parameter // メソッド (SPEC 5.6)。nil はトップレベル関数
 	Parameters  []Parameter
 	ReturnTypes []TypeNode // 単一 / 複数 (SPEC 5.3) の戻り値型。空なら戻り値なし
 	Body        *BlockStatement
@@ -416,6 +417,9 @@ type FunctionStatement struct {
 func (fs *FunctionStatement) statementNode() {}
 
 func (fs *FunctionStatement) String() string {
+	if fs.Receiver != nil {
+		return "func" + " (recv) " + fs.Name
+	}
 	return "func " + fs.Name
 }
 

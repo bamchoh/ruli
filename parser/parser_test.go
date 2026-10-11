@@ -1332,3 +1332,53 @@ case 1 2:
 		t,
 	)
 }
+
+func TestMethodParse(t *testing.T) {
+	input := `func (m: Motor) stop() BOOL { return true }`
+
+	l := lexer.New(input)
+	p := New(l)
+	program := p.ParseProgram()
+	if len(p.Errors()) != 0 {
+		t.Fatalf("unexpected parse errors: %v", p.Errors())
+	}
+
+	fn := program.Statements[0].(*ast.FunctionStatement)
+	if fn.Receiver == nil {
+		t.Fatal("fn.Receiver not set")
+	}
+	if fn.Receiver.Name != "m" || fn.Receiver.Ref {
+		t.Fatalf("receiver not as expected. got=%+v", fn.Receiver)
+	}
+	if fn.Receiver.Type == nil || fn.Receiver.Type.String() != "Motor" {
+		t.Fatalf("receiver type not Motor")
+	}
+	if fn.Name != "stop" || len(fn.Parameters) != 0 {
+		t.Fatalf("method name/params not as expected")
+	}
+}
+
+func TestRefMethodParse(t *testing.T) {
+	l := lexer.New(`func (m: ref Motor) stop(v: INT) BOOL { return true }`)
+	p := New(l)
+	program := p.ParseProgram()
+	if len(p.Errors()) != 0 {
+		t.Fatalf("unexpected parse errors: %v", p.Errors())
+	}
+
+	fn := program.Statements[0].(*ast.FunctionStatement)
+	if fn.Receiver == nil || !fn.Receiver.Ref {
+		t.Fatal("receiver must be ref")
+	}
+	if len(fn.Parameters) != 1 || fn.Parameters[0].Name != "v" {
+		t.Fatalf("parameters not as expected")
+	}
+}
+
+func TestMethodReceiverCountError(t *testing.T) {
+	testParseErrors(
+		`func (m: Motor, n: Motor) stop() BOOL { return true }`,
+		[]string{"method receiver count must be 1"},
+		t,
+	)
+}

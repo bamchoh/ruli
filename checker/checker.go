@@ -27,6 +27,9 @@ type Checker struct {
 	// struct 型宣言のレジストリ (型名 → 型)
 	types map[string]*Type
 
+	// メソッドのレジストリ (struct 型名 → メソッド名 → 宣言)
+	methods map[string]map[string]*ast.FunctionStatement
+
 	// 現在チェック中の関数の戻り値型 (関数外なら nil / 空)
 	returnTypes []*Type
 	inFunction  bool
@@ -74,6 +77,12 @@ func (c *Checker) Check(program *ast.Program) []TypeError {
 	for _, stmt := range program.Statements {
 		if fn, ok := stmt.(*ast.FunctionStatement); ok {
 			c.registerFunctionSignature(fn, c.env)
+		}
+	}
+	// メソッドは事前登録して順不同呼び出しを可能にする (SPEC 5.6)
+	for _, stmt := range program.Statements {
+		if fn, ok := stmt.(*ast.FunctionStatement); ok && fn.Receiver != nil {
+			c.registerMethodPrepass(fn)
 		}
 	}
 
@@ -715,8 +724,8 @@ func (c *Checker) checkReturn(stmt *ast.ReturnStatement, env *Env) {
 	}
 }
 
-// registerFunctionSignature は関数のシグネチャ型を現在スコープに登録する
-func (c *Checker) registerFunctionSignature(stmt *ast.FunctionStatement, env *Env) *Type {
+// signatureOf は宣言からシグネチャ型を作る (環境登録はしない)
+func (c *Checker) signatureOf(stmt *ast.FunctionStatement) *Type {
 	params := make([]Type, 0, len(stmt.Parameters))
 	refs := make([]bool, 0, len(stmt.Parameters))
 
@@ -746,9 +755,67 @@ func (c *Checker) registerFunctionSignature(stmt *ast.FunctionStatement, env *En
 		returns = append(returns, t)
 	}
 
-	fn := &Type{Name: FUNCTION_TYPE.Name, Params: params, Refs: refs, Returns: returns}
+	return &Type{Name: FUNCTION_TYPE.Name, Params: params, Refs: refs, Returns: returns}
+}
+
+// registerFunctionSignature は関数のシグネチャ型を現在スコープに登録する
+func (c *Checker) registerFunctionSignature(stmt *ast.FunctionStatement, env *Env) *Type {
+	if stmt.Receiver != nil {
+		// メソッドはトップレベルの名前空間に入れない
+		return c.signatureOf(stmt)
+	}
+
+	fn := c.signatureOf(stmt)
 	env.Set(stmt.Name, fn)
 	return fn
+}
+
+// registerMethodPrepass はメソッドを型レジストリに事前登録する
+func (c *Checker) registerMethodPrepass(fn *ast.FunctionStatement) {
+	if c.methods == nil {
+		c.methods = make(map[string]map[string]*ast.FunctionStatement)
+	}
+
+	typeName := c.receiverTypeName(fn)
+	if typeName == "" {
+		return // 型エラーは checkFunctionBody で報告される
+	}
+
+	if _, dup := c.methods[typeName][fn.Name]; dup {
+		c.errAt(fn.GetToken(), "duplicate method: %s.%s", typeName, fn.Name)
+		return
+	}
+
+	if c.methods[typeName] == nil {
+		c.methods[typeName] = make(map[string]*ast.FunctionStatement)
+	}
+	c.methods[typeName][fn.Name] = fn
+}
+
+// receiverTypeName はレシーバの struct 型名を返す (解決できなければ "")
+func (c *Checker) receiverTypeName(fn *ast.FunctionStatement) string {
+	if fn.Receiver == nil || fn.Receiver.Type == nil {
+		return ""
+	}
+
+	name := fn.Receiver.Type.String()
+	if st, ok := c.types[name]; ok && st.Name == STRUCT_TYPE.Name {
+		return name
+	}
+	return ""
+}
+
+// structNameOf は struct 型の宣言名を返す (struct でなければ "")
+func (c *Checker) structNameOf(t *Type) string {
+	if t == nil || t.Name != STRUCT_TYPE.Name {
+		return ""
+	}
+	for name, st := range c.types {
+		if st == t {
+			return name
+		}
+	}
+	return ""
 }
 
 // checkFunctionBody は関数の本体をチェックする (シグネチャは登録済み前提)
@@ -758,6 +825,46 @@ func (c *Checker) checkFunctionBody(stmt *ast.FunctionStatement, env *Env) {
 	fnEnv := NewEnclosedEnvironment(env)
 	for i, param := range stmt.Parameters {
 		fnEnv.Set(param.Name, &fnType.Params[i])
+	}
+
+	// メソッド (SPEC 5.6): レシーバの検査と本体環境への登録
+	var recvType *Type = UNKNOWN_TYPE
+	if stmt.Receiver != nil {
+		if stmt.Receiver.Type == nil {
+			c.errAt(stmt.GetToken(), "method receiver requires a type")
+			return
+		}
+
+		rt := c.resolveTypeNode(stmt.Receiver.Type)
+		if rt == nil {
+			return // 型エラーは resolveTypeNode が報告済み
+		}
+
+		if rt.Name != STRUCT_TYPE.Name {
+			c.errAt(
+				stmt.Receiver.Type.GetToken(),
+				"method receiver must be a struct, got %s",
+				rt.String(),
+			)
+			return
+		}
+
+		structName := c.structNameOf(rt)
+		if structName != "" {
+			if _, ok := rt.Fields[stmt.Name]; ok {
+				c.errAt(
+					stmt.GetToken(),
+					"method conflicts with field: %s.%s",
+					structName,
+					stmt.Name,
+				)
+				return
+			}
+		}
+
+		recvType = rt
+		// レシーバ名を関数環境へ登録 (レシーバは 1 つ: パースで制限済み)
+		fnEnv.Set(stmt.Receiver.Name, recvType)
 	}
 
 	prevReturn, prevInFunction := c.returnTypes, c.inFunction
@@ -1100,6 +1207,47 @@ func (c *Checker) checkOperation(lt *Type, operator string, rt *Type, token lexe
 
 func (c *Checker) checkCall(e *ast.CallExpression, env *Env) *Type {
 
+	// メソッド呼び出し (SPEC 5.6): m.reset()
+	if sel, ok := e.Function.(*ast.SelectorExpression); ok {
+		ot := c.checkExpr(sel.Object, env)
+		if ot != nil {
+			structName := c.structNameOf(ot)
+			if structName == "" {
+				c.errAt(
+					e.GetToken(),
+					"no method '%s' on %s",
+					sel.Field,
+					ot.String(),
+				)
+				return nil
+			}
+
+			if _, isField := ot.Fields[sel.Field]; isField {
+				c.errAt(e.GetToken(), "field is not a function: %s", sel.Field)
+				return nil
+			}
+
+			method, ok := c.methods[structName][sel.Field]
+			if !ok {
+				c.errAt(
+					e.GetToken(),
+					"undefined method: %s.%s",
+					structName,
+					sel.Field,
+				)
+				return nil
+			}
+
+			fnType := c.signatureOf(method)
+			returnType := c.checkCallArgs(e, env, fnType)
+			if returnType == nil {
+				return nil
+			}
+			return returnType
+		}
+		return nil
+	}
+
 	var fnType *Type
 	if ident, ok := e.Function.(*ast.Identifier); ok {
 		if t, found := env.Get(ident.Value); found {
@@ -1118,12 +1266,16 @@ func (c *Checker) checkCall(e *ast.CallExpression, env *Env) *Type {
 	} else {
 		c.errAt(
 			e.GetToken(),
-			"not a function: %s",
-			"",
+			"not a function",
 		)
 		return nil
 	}
 
+	return c.checkCallArgs(e, env, fnType)
+}
+
+// checkCallArgs は引数の個数・ref 変数形・型を検査し、戻り値型を返す (エラー時 nil)
+func (c *Checker) checkCallArgs(e *ast.CallExpression, env *Env, fnType *Type) *Type {
 	// ホスト関数 (embed API) の引数は個数・型不定。ホスト側が検証する
 	if fnType.Variadic {
 		for _, arg := range e.Arguments {

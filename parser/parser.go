@@ -1100,8 +1100,28 @@ func (p *Parser) parseFunctionStatement() *ast.FunctionStatement {
 		Token: p.curToken,
 	}
 
-	p.nextToken() // function name
-	stmt.Name = p.curToken.Literal
+	if p.peekToken.Type == lexer.LPAREN {
+		// メソッド (SPEC 5.6): func (m: Motor) reset() BOOL { ... }
+		p.nextToken() // (
+		receivers := p.parseFunctionParameters()
+		switch {
+		case len(receivers) == 1:
+			recv := receivers[0]
+			stmt.Receiver = &recv
+		case len(receivers) > 1:
+			// レシーバは 1 つのみ
+			p.errorAtPeek("method receiver count must be 1")
+		}
+
+		if !p.expectPeek(lexer.IDENT) {
+			return stmt
+		}
+		p.nextToken() // method name
+		stmt.Name = p.curToken.Literal
+	} else {
+		p.nextToken() // function name
+		stmt.Name = p.curToken.Literal
+	}
 
 	if !p.expectPeek(lexer.LPAREN) {
 		return stmt

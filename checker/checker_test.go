@@ -825,3 +825,89 @@ func TestCheckStructLiteralErrors(t *testing.T) {
 		t,
 	)
 }
+
+func TestCheckMethodValid(t *testing.T) {
+	input := `type Motor struct {
+	speed: INT
+}
+
+func (m: Motor) isStopped() BOOL {
+	return m.speed == 0
+}
+
+func (m: ref Motor) stop() BOOL {
+	m.speed = 0
+	return true
+}
+
+func (m: ref Motor) setSpeed(v: INT) BOOL {
+	m.speed = v
+	return v > 0
+}
+
+m : Motor
+m.setSpeed(5)
+m.stop()
+q := m.isStopped()`
+	if errs := Check(parseInput(input)); len(errs) > 0 {
+		t.Fatalf("unexpected errors: %v", errs)
+	}
+}
+
+func TestCheckMethodErrs(t *testing.T) {
+	base := `type Motor struct {
+	speed: INT
+}
+
+`
+	testCheckErrors(
+		base+`func (m: Motor) speed() BOOL { return true }`,
+		[]string{"method conflicts with field: Motor.speed"},
+		t,
+	)
+	testCheckErrors(
+		base+`func (m: Motor) stop() BOOL { return true }
+func (m: Motor) stop() BOOL { return false }`,
+		[]string{"duplicate method: Motor.stop"},
+		t,
+	)
+	testCheckErrors(
+		`func (n: INT) reset(v: INT) INT { return v }`,
+		[]string{"method receiver must be a struct, got INT"},
+		t,
+	)
+	testCheckErrors(
+		base+`m : Motor
+m.restart()`,
+		[]string{"undefined method: Motor.restart"},
+		t,
+	)
+	testCheckErrors(
+		base+`m : Motor
+m.speed()`,
+		[]string{"field is not a function: speed"},
+		t,
+	)
+	testCheckErrors(
+		base+`x := 1
+x.foo()`,
+		[]string{"no method 'foo' on INT"},
+		t,
+	)
+	testCheckErrors(
+		base+`func (m: Motor) set(v: INT) BOOL { return true }
+
+m : Motor
+m.set(true)`,
+		[]string{"type mismatch: argument 1: expected INT, got BOOL"},
+		t,
+	)
+	testCheckErrors(
+		base+`func (m: Motor) set(v: INT) BOOL { return true }
+
+m : Motor
+m.set(1, 2)`,
+		[]string{"wrong number of arguments. got=2, want=1"},
+		t,
+	)
+}
