@@ -113,6 +113,7 @@ var (
 	// STRUCT_TYPE は struct 型。シグネチャ (フィールド) は必ず上書きして使う
 	STRUCT_TYPE = &Type{Name: "STRUCT", Fields: map[string]*Type{}}
 	MULTI_TYPE  = &Type{Name: "MULTI"} // 複数戻り値 (Returns を必ず設定)
+	NULL_TYPE   = &Type{Name: "NULL"}  // nil リテラル (SPEC 10)。== != のみ比較可
 )
 
 // IEC61131 固定幅整数型 (SPEC 4.1) — 値モデルは INT と共有 (Go int)

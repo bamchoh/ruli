@@ -1146,3 +1146,16 @@ grow(short)`,
 		t,
 	)
 }
+
+func TestNilLiteralEval(t *testing.T) {
+	testEvalBool(`nil == nil`, true, t)
+	testEvalBool(`nil != nil`, false, t)
+	testEvalBool(`x := nil
+x == nil`, true, t)
+	testEvalBool(`y := 5
+y == nil`, false, t)
+	testEvalBool(`y := 5
+y != nil`, true, t)
+	testEvalBool(`s := "text"
+s != nil`, true, t)
+}

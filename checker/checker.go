@@ -1006,6 +1006,9 @@ func (c *Checker) checkExpr(expr ast.Expression, env *Env) *Type {
 	case *ast.BooleanLiteral:
 		return BOOL_TYPE
 
+	case *ast.NilLiteral:
+		return NULL_TYPE
+
 	case *ast.StringLiteral:
 		return STRING_TYPE
 
@@ -1242,6 +1245,24 @@ func (c *Checker) checkOperation(lt *Type, operator string, rt *Type, token lexe
 		}
 
 	case "==", "!=":
+		// nil 比較 (SPEC 10): スカラー / VOID とは常に許可 (実行時の値で決まる)。
+		// struct / 配列 / 関数値は nil にならないので不可
+		if lt.Name == NULL_TYPE.Name || rt.Name == NULL_TYPE.Name {
+			other := lt
+			if lt.Name == NULL_TYPE.Name {
+				other = rt
+			}
+			switch other.Name {
+			case NULL_TYPE.Name, STRING_TYPE.Name, BOOL_TYPE.Name, VOID_TYPE.Name:
+				return BOOL_TYPE
+			}
+			if isNumeric(other) {
+				return BOOL_TYPE
+			}
+			c.errAt(token, "cannot compare %s with nil", other.String())
+			return nil
+		}
+
 		// 比較可能なのは基本値型のみ (配列 / struct / 関数は値渡しなので比較は禁止)
 		for _, t := range []*Type{lt, rt} {
 			switch t.Name {

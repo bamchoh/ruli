@@ -1458,3 +1458,21 @@ func TestStringTypeParseErrors(t *testing.T) {
 		t,
 	)
 }
+
+func TestNilLiteralParse(t *testing.T) {
+	l := lexer.New(`x := nil`)
+	p := New(l)
+	program := p.ParseProgram()
+	if len(p.Errors()) != 0 {
+		t.Fatalf("unexpected parse errors: %v", p.Errors())
+	}
+
+	decl := program.Statements[0].(*ast.VarDeclStatement)
+	nl, ok := decl.Value.(*ast.NilLiteral)
+	if !ok {
+		t.Fatalf("decl.Value not *ast.NilLiteral. got=%T", decl.Value)
+	}
+	if nl.String() != "nil" {
+		t.Fatalf("String not nil. got=%s", nl.String())
+	}
+}

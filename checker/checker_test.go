@@ -1037,3 +1037,46 @@ s = "abcd"`,
 	)
 
 }
+
+func TestCheckNilValid(t *testing.T) {
+	input := `x := nil
+y := 5
+ok := y == nil
+ok2 := x != nil
+text := "v"
+ok3 := text != nil`
+	if errs := Check(parseInput(input)); len(errs) > 0 {
+		t.Fatalf("unexpected errors: %v", errs)
+	}
+}
+
+func TestCheckNilErrors(t *testing.T) {
+	testCheckErrors(
+		`n : INT = nil`,
+		[]string{"type mismatch: declared INT, got NULL"},
+		t,
+	)
+	testCheckErrors(
+		`x := nil
+x + 1`,
+		[]string{"type mismatch: NULL + INT"},
+		t,
+	)
+	testCheckErrors(
+		`type M struct {
+	s: INT
+}
+
+m : M
+m == nil`,
+		[]string{"cannot compare STRUCT with nil"},
+		t,
+	)
+	testCheckErrors(
+		`if nil {
+	print(1)
+}`,
+		[]string{"condition must be BOOL, got NULL"},
+		t,
+	)
+}

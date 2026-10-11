@@ -197,6 +197,9 @@ func Eval(node ast.Node, env *object.Environment) object.Object {
 	case *ast.BooleanLiteral:
 		return nativeBoolToBooleanObject(node.Value)
 
+	case *ast.NilLiteral:
+		return nullSentinel
+
 	case *ast.Identifier:
 		// 環境を優先 (ホスト関数やユーザ定義が組み込みを上書きできる)
 		if v, ok := env.Get(node.Value); ok {
@@ -434,6 +437,18 @@ func applyBinaryOperator(
 	node ast.Node,
 ) object.Object {
 
+	// nil (SPEC 10): == / != のみ。比較可能なのはスカラー / VOID (checker が保証)。
+	// どちらか一方でも null なら不一致。nil == nil のみ一致
+	if left.Type() == object.NULL_OBJ || right.Type() == object.NULL_OBJ {
+		eq := left.Type() == object.NULL_OBJ && right.Type() == object.NULL_OBJ
+		switch operator {
+		case "==":
+			return nativeBoolToBooleanObject(eq)
+		case "!=":
+			return nativeBoolToBooleanObject(!eq)
+		}
+	}
+
 	switch {
 	case left.Type() == object.INTEGER_OBJ && right.Type() == object.INTEGER_OBJ:
 		return evalIntegerBinaryExpression(operator, left, right, node)
@@ -667,8 +682,16 @@ func evalSwitchCaseBody(body *ast.BlockStatement, env *object.Environment) objec
 	return result // RETURN / CONTINUE は外側へ伝播する
 }
 
+// nullSentinel は nil リテラルの評価結果 (共有インスタンス)
+var nullSentinel = &object.Null{}
+
 // valuesEqual は switch の一致判定 (型が異なれば不一致)
 func valuesEqual(a, b object.Object) bool {
+	if _, ok := a.(*object.Null); ok {
+		_, ok = b.(*object.Null)
+		return ok
+	}
+
 	switch x := a.(type) {
 	case *object.Integer:
 		y, ok := b.(*object.Integer)

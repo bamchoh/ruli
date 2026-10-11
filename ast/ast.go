@@ -720,6 +720,21 @@ func (tds *TypeDeclStatement) GetToken() lexer.Token {
 	return tds.Token
 }
 
+// NilLiteral は nil リテラル (SPEC 10)。Null 値に評価される
+type NilLiteral struct {
+	Token lexer.Token
+}
+
+func (nl *NilLiteral) expressionNode() {}
+
+func (nl *NilLiteral) String() string {
+	return "nil"
+}
+
+func (nl *NilLiteral) GetToken() lexer.Token {
+	return nl.Token
+}
+
 type BooleanLiteral struct {
 	Token lexer.Token
 	Value bool
