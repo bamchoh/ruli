@@ -539,8 +539,11 @@ lexer → parser → ast → checker → evaluator → object
 # 17. CLI
 
 ```
-ruli <script>    # .ruli ファイルを実行
+ruli            # REPL (式の結果は "= 値" で表示、複数行継続あり)
+ruli <script>   # .ruli ファイルを実行
 ```
 
 - `go run ./cmd/ruli script.ruli` または `go build ./cmd/ruli` で生成したバイナリ
+- REPL: 未完の構文 (`if x {` など) は `    > ` プロンプトで継続。`.help` / `.exit`
+- サンプルスクリプトは `examples/` (基本文法 / メソッド / PI 制御ループ)
 - 解析エラー・型エラー・実行時エラーともに非ゼロ終了コード

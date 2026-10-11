@@ -1,0 +1,29 @@
+# PLC 向けサンプル: 簡易 PI 制御ループのシミュレーション
+
+type PI struct {
+	kp:     REAL
+	ki:     REAL
+	target: REAL
+	errSum: REAL
+}
+
+func (c: ref PI) step(measure: REAL) REAL {
+	err := c.target - measure
+
+	# 積分項を更新 (サンプル周期 0.1 秒と仮定)
+	c.errSum = c.errSum + err * 0.1
+
+	return c.kp * err + c.ki * c.errSum
+}
+
+ctrl := PI{kp: 0.5, ki: 0.1, target: 50.0}
+measure := 0.0
+
+for i := 0; i < 100; i++ {
+	u := ctrl.step(measure)
+
+	# 1 次遅れの簡易モデル
+	measure = measure + u * 0.2
+}
+
+print(measure)   # 目標値 50.0 に収束する

@@ -181,3 +181,43 @@ func TestHostFunctionArityIsUnchecked(t *testing.T) {
 		t.Fatalf("wrong output. got=%q", got)
 	}
 }
+
+func TestEvalStringReturnsValue(t *testing.T) {
+	s := ruli.New()
+
+	v, err := s.EvalString("1 + 2")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := v.Inspect(); got != "3" {
+		t.Fatalf("wrong value. got=%s", got)
+	}
+
+	// 宣言は Null
+	v, err = s.EvalString("x := 5")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, isNull := v.(*object.Null); !isNull {
+		t.Fatalf("declaration should return Null. got=%T", v)
+	}
+
+	// break は Null に畳まれる
+	v, err = s.EvalString("break")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, isNull := v.(*object.Null); !isNull {
+		t.Fatalf("break should flatten to Null. got=%T", v)
+	}
+
+	// トップレベル return はその値
+	src := "func f(a: INT) INT { return a * 2 }\nf(21)"
+	v, err = s.EvalString(src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := v.Inspect(); got != "42" {
+		t.Fatalf("wrong return value. got=%s", got)
+	}
+}

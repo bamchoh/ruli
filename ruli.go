@@ -88,17 +88,33 @@ func NewNullValue() Value { return &object.Null{} }
 // エラーは 行:列 形式。複数の parse / 型エラーは改行で連結される。
 // 実行結果の値が不要な用途を想定している。環境は次回の実行に引き継がれる
 func (s *Script) RunString(src string) error {
+	_, err := s.EvalString(src)
+	return err
+}
+
+// EvalString はソース文字列を実行し、最後の文の値を返す (REPL 用)。
+// break / continue は Null に、トップレベル return はその値に畳まれる
+func (s *Script) EvalString(src string) (Value, error) {
 	program, err := s.Program(src)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	result := evaluator.Eval(program, s.env)
 	if errObj, ok := result.(*object.Error); ok {
-		return errors.New(errObj.Inspect())
+		return nil, errors.New(errObj.Inspect())
 	}
 
-	return nil
+	switch v := result.(type) {
+	case *object.BreakSignal, *object.ContinueSignal:
+		return &object.Null{}, nil
+	case *object.ReturnValue:
+		if len(v.Values) == 1 {
+			return v.Values[0], nil
+		}
+	}
+
+	return result, nil
 }
 
 // RunFile は .ruli ファイルを実行する

@@ -1,0 +1,25 @@
+# ruli 基本 (瑠璃)
+
+name := "ruli"
+print(name)
+
+x := 10
+y := 20
+print(x + y)
+
+# ループと複合代入
+total := 0
+for i := 0; i < 5; i++ {
+	total += i
+}
+print(total)
+
+# 固定幅型とキャスト (SPEC 4.1 / 6.3)
+temp : SINT = -40
+ratio := 2.5 / 5.0
+print(temp)
+print(ratio + REAL(x))
+
+# 配列と struct リテラル
+flags := [true, false, true]
+print(len(flags))

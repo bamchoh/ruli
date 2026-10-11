@@ -1,0 +1,27 @@
+# struct とメソッド (SPEC 4.3 / 5.6)
+
+type Motor struct {
+	speed: INT
+}
+
+func (m: Motor) isStopped() BOOL {
+	return m.speed == 0
+}
+
+func (m: ref Motor) stop() BOOL {
+	m.speed = 0
+	return true
+}
+
+func (m: ref Motor) setSpeed(v: INT) BOOL {
+	m.speed = v
+	return v > 0
+}
+
+# 構造体リテラルで生成 (未指定フィールドはゼロ値)
+m := Motor{speed: 5}
+
+print(m.isStopped())
+m.stop()
+print(m.speed)
+print(m.isStopped())

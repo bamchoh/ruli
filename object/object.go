@@ -293,6 +293,9 @@ func (a *Array) Inspect() string {
 // Struct は SPEC 4.3 の struct 型の値。フィールドは公開、値渡し (Copy)
 type Struct struct {
 	Fields map[string]Object
+
+	// 宣言された struct 型名 (メソッド解決に使用。ホスト生成値などは空)
+	TypeName string
 }
 
 func (s *Struct) Type() ObjectType {
@@ -338,7 +341,7 @@ func (s *Struct) Copy() *Struct {
 		}
 	}
 
-	return &Struct{Fields: fields}
+	return &Struct{Fields: fields, TypeName: s.TypeName}
 }
 
 // StructDef は実行時の型定義 (ゼロ値構築に使用)

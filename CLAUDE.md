@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ruli（瑠璃）is an embeddable, statically-typed AST-interpreter scripting language written in Go, aimed at control/PLC (IEC 61131-style) use cases. The language spec lives in `docs/SPEC.md` — treat it as the source of truth for intended behavior; the implementation is still catching up to parts of it (e.g. distinct types, structs, fixed-size array types, multi-return functions are specced but not all implemented yet).
 
-`cmd/ruli/main.go` is the CLI: `ruli <script>` reads a `.ruli` file, parses it (reporting parse errors to stderr with line/column), and evaluates. There is no REPL yet. Wire up new language features by extending that pipeline.
+`cmd/ruli/main.go` is the CLI: `ruli <script>` runs a `.ruli` file; with no arguments it starts a REPL (`cmd/ruli/repl.go`, built on the root embed API). Wire up new language features by extending that pipeline.
 
 ## Commands
 
@@ -14,7 +14,7 @@ ruli（瑠璃）is an embeddable, statically-typed AST-interpreter scripting lan
 - Run all tests: `go test ./...`
 - Run one package's tests: `go test ./parser` (or `./lexer`)
 - Run a single test: `go test ./parser -run TestParserName`
-- Run a script: `go run ./cmd/ruli script.ruli` (or build once with `go build -o ruli.exe ./cmd/ruli`, then `./ruli.exe script.ruli`)
+- Run a script: `go run ./cmd/ruli script.ruli` (or build once with `go build -o ruli.exe ./cmd/ruli`, then `./ruli.exe script.ruli`). No arguments starts the REPL (multi-line continuation, `= value` echo). `examples/` holds runnable sample scripts and cmd/ruli's tests execute them all
 - Embed in a Go host: root package `ruli` (see `ruli.go`) — `ruli.New()` → `SetOutput` / `SetFunction(name, returnType, fn)` / `RunString` / `RunFile`. The evaluator environment and the checker's symbol env persist across `RunString` calls on one `Script`
 
 CI (`.github/workflows/go.yml`) runs build + `go test ./...` on Go 1.25 for pushes/PRs to main. There are no linters configured.

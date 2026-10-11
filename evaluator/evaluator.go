@@ -130,11 +130,11 @@ func Eval(node ast.Node, env *object.Environment) object.Object {
 				return errObj
 			}
 			env.DeclareTyped(node.Name.Value, bindValue(val), basic.Name)
-			return val
+			return nullObject
 		}
 
 		env.Set(node.Name.Value, bindValue(val))
-		return val
+		return nullObject
 
 	case *ast.TypeDeclStatement:
 		// 実行時の型定義を登録する (ゼロ値構築に使用)
@@ -162,14 +162,20 @@ func Eval(node ast.Node, env *object.Environment) object.Object {
 		if isError(val) {
 			return val
 		}
-		return evalAssignStatement(node, val, env)
+		if res := evalAssignStatement(node, val, env); isError(res) {
+			return res
+		}
+		return nullObject
 
 	case *ast.CompoundAssignStatement:
 		val := Eval(node.Value, env)
 		if isError(val) {
 			return val
 		}
-		return evalCompoundAssignStatement(node, val, env)
+		if res := evalCompoundAssignStatement(node, val, env); isError(res) {
+			return res
+		}
+		return nullObject
 
 	case *ast.IntegerLiteral:
 		return &object.Integer{Value: node.Value}
@@ -264,7 +270,7 @@ func Eval(node ast.Node, env *object.Environment) object.Object {
 						def.Methods = make(map[string]*object.Function)
 					}
 					def.Methods[node.Name] = fn
-					return fn
+					return nullObject
 				}
 
 				return newErrorAtNode(node, "undefined struct type: %s", typeName)
@@ -274,7 +280,7 @@ func Eval(node ast.Node, env *object.Environment) object.Object {
 		}
 
 		env.Set(node.Name, fn)
-		return fn
+		return nullObject
 
 	case *ast.ReturnStatement:
 		values := make([]object.Object, 0, len(node.Values))
@@ -986,6 +992,7 @@ func evalStructLiteral(
 	if !ok {
 		return newErrorAtNode(node, "undefined struct type: %s", node.Name)
 	}
+	s.TypeName = node.Name
 
 	for _, field := range node.Fields {
 		if _, ok := s.Fields[field.Name]; !ok {
@@ -1002,6 +1009,9 @@ func evalStructLiteral(
 
 	return s
 }
+
+// nullObject は評価結果が不要な文の戻り値
+var nullObject = &object.Null{}
 
 // evalSelectorExpression は m.speed のようなフィールド読み出し
 func evalSelectorExpression(
@@ -1065,7 +1075,7 @@ func zeroValue(env *object.Environment, typeName string) object.Object {
 		for name, ft := range def.FieldTypes {
 			fields[name] = zeroValueForTypeNode(ft, env)
 		}
-		return &object.Struct{Fields: fields}
+		return &object.Struct{Fields: fields, TypeName: typeName}
 	}
 
 	return &object.Null{}
@@ -1082,31 +1092,40 @@ func isIntFamilyName(name string) bool {
 }
 
 // evalMethodCall はメソッド呼び出しを解決して適用する。
-// メソッドが見つからない場合は nil を返す (通常の呼び出しにフォールバック)
+// 非structレシーバなら nil を返す (通常の呼び出しにフォールバック)
 func evalMethodCall(
 	node *ast.CallExpression,
 	sel *ast.SelectorExpression,
 	env *object.Environment,
 ) object.Object {
 
+	recvObj := Eval(sel.Object, env)
+	if isError(recvObj) {
+		return recvObj
+	}
+
+	// 型名は宣言時型から、なければ値が保持する struct 型名から解決する
+	// (m := Motor{...} のような型推論束縛)
 	typeName := typeNameOfExpr(sel.Object, env)
 	if typeName == "" {
+		if sv, ok := recvObj.(*object.Struct); ok {
+			typeName = sv.TypeName
+		}
+	}
+
+	s, ok := recvObj.(*object.Struct)
+	if !ok || typeName == "" || s.TypeName == "" {
 		return nil
 	}
 
 	def, ok := env.GetTypeDef(typeName)
 	if !ok || def.Methods == nil {
-		return nil
+		return newErrorAtNode(node, "undefined method: %s.%s", typeName, sel.Field)
 	}
 
 	method, ok := def.Methods[sel.Field]
 	if !ok {
-		return nil
-	}
-
-	recvObj := Eval(sel.Object, env)
-	if isError(recvObj) {
-		return recvObj
+		return newErrorAtNode(node, "undefined method: %s.%s", typeName, sel.Field)
 	}
 
 	args := make([]object.Object, 0, len(node.Arguments))
