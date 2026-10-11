@@ -1,163 +1,165 @@
 # ruli
 
 <p align="center">
-  <img alt="ロゴ" src="logo.png" width="50%" height="50%">
+  <img alt="Logo" src="logo.png" width="50%" height="50%">
 </p>
 
-**ruli(瑠璃)** は Go に埋め込み可能な、静的型付けの AST インタプリタ型スクリプト言語です。
+[English](README.md) | 日本語
 
-- **静的型付け**:実行前に型不一致・未定義参照・配列境界・固定幅値域を検査
-- **IEC 61131-3 風の型**:`SINT`/`DINT`/`WORD` などの固定幅型と `STRING(n)` を提供
-- **値渡し基調**:`=` / 引数は常に値のコピー。書き込みたいときだけ明示的に `ref`(VAR_IN_OUT 相当)
-- **Go 埋め込み**:ホスト関数の登録・変数の直接読み書き・出力先の差し替えが可能
-- エラーはすべて `行:列` 形式で報告され、1 つの間違いは 1 つのエラーに収束します
+**ruli** is an embeddable, statically-typed, AST-interpreter scripting language written in Go.
 
-現時点の言語仕様の詳細は [`docs/SPEC.md`](docs/SPEC.md) を参照してください。
+- **Statically typed**: type mismatches, undefined references, array bounds, and fixed-width range violations are all checked before execution
+- **IEC 61131-3-style types**: fixed-width types such as `SINT`/`DINT`/`WORD`, plus `STRING(n)`
+- **Pass-by-value semantics**: `=` and arguments always copy values. Use `ref` explicitly when you need to write through (equivalent to VAR_IN_OUT)
+- **Go embedding**: register host functions, read and write variables directly, and swap the output destination
+- Every error is reported in `line:column` form, and a single mistake converges into a single error
 
-## クイックスタート
+For the full language specification as it stands, see [`docs/SPEC.md`](docs/SPEC.md) (in Japanese).
+
+## Quick Start
 
 ```
-# サンプルスクリプトを実行
+# Run a sample script
 go run ./cmd/ruli examples/hello.ruli
 
-# REPL(引数なしで起動)
+# REPL (starts with no arguments)
 go run ./cmd/ruli
 
-# ビルド
+# Build
 go build -o ruli.exe ./cmd/ruli
 ./ruli.exe examples/methods.ruli
 ```
 
-examples: [`hello.ruli`](examples/hello.ruli) 基本文法 / [`methods.ruli`](examples/methods.ruli) struct + メソッド / [`pid.ruli`](examples/pid.ruli) PI 制御ループ。
+Examples: [`hello.ruli`](examples/hello.ruli) basic syntax / [`methods.ruli`](examples/methods.ruli) structs + methods / [`pid.ruli`](examples/pid.ruli) PI control loop.
 
-## 言語ツアー
+## Language Tour
 
-### 変数・スコープ
+### Variables and Scope
 
 ```
-x := 10            # 束縛(現在スコープに宣言)
-y : INT            # 型付き宣言(ゼロ値で初期化)
-age : WORD = 5     # 宣言 + 初期化
+x := 10            # binding (declared in the current scope)
+y : INT            # typed declaration (initialized to the zero value)
+age : WORD = 5     # declaration + initialization
 
-x = 20             # = は既存変数の更新のみ(未定義への代入はエラー)
+x = 20             # = only updates existing variables (assigning to an undefined name is an error)
 
 if true {
-	x := 99         # ブロックスコープ + シャドーイング
+	x := 99         # block scope + shadowing
 }
-print(x)           # 20(ブロック内の := は外を汚さない)
+print(x)           # 20 (:= inside a block doesn't pollute the outer scope)
 ```
 
-### 固定幅型と値域検査
+### Fixed-Width Types and Range Checking
 
-IEC 61131-3 由来の型。宣言・代入・`++`/`--`・キャスト時に値域が検査され、あふれは静かなラップではなく**エラー**です。
+Types descended from IEC 61131-3. Ranges are checked at declaration, assignment, `++`/`--`, and casts; overflow is an **error**, not a silent wrap.
 
-| 型                   | 符号     | 値域                     | 備考               |
-| -------------------- | -------- | ------------------------ | ------------------ |
-| BOOL                 | -        | true/false               |                    |
-| SINT / USINT / BYTE  | ± / なし | −128..127 / 0..255       | 8bit               |
-| INT / UINT / WORD    | ± / なし | −32768..32767 / 0..65535 | 16bit              |
-| DINT / UDINT / DWORD | ± / なし | 32bit                    |                    |
-| LINT / ULINT / LWORD | ± / なし | 64bit                    |                    |
-| REAL / LREAL         | -        | float / double           |                    |
-| STRING / STRING(n)   | -        | 文字列                   | n は最大長(ルーン) |
+| Type                 | Signedness    | Range                    | Notes                    |
+| -------------------- | ------------- | ------------------------ | ------------------------ |
+| BOOL                 | -             | true/false               |                          |
+| SINT / USINT / BYTE  | ± / none      | −128..127 / 0..255       | 8-bit                    |
+| INT / UINT / WORD    | ± / none      | −32768..32767 / 0..65535 | 16-bit                   |
+| DINT / UDINT / DWORD | ± / none      | 32-bit                   |                          |
+| LINT / ULINT / LWORD | ± / none      | 64-bit                   |                          |
+| REAL / LREAL         | -             | float / double           |                          |
+| STRING / STRING(n)   | -             | string                   | n is the max length (runes) |
 
 ```
 temp : SINT = -40        # OK
 temp = 200               # value 200 out of range for SINT (-128..127)
-c := REAL(x) + y         # INT + REAL はエラー。明示キャスト必須
-DINT(REAL(7) / REAL(2))  # 実数 → 整数は 0 方向へ切り捨て
+c := REAL(x) + y         # INT + REAL is an error; an explicit cast is required
+DINT(REAL(7) / REAL(2))  # real → integer truncates toward zero
 ```
 
-### 文字列
+### Strings
 
 ```
 name := "瑠璃"
 greeting := "こんにちは" + name
-len(greeting)      # ルーン数
-greeting[0]        # "こ"(1 文字を STRING で返す)
-"abc" < "abd"      # 辞書順比較 (== != < <= > >=)
+len(greeting)      # number of runes
+greeting[0]        # "こ" (a single character, returned as a STRING)
+"abc" < "abd"      # lexicographic comparison (== != < <= > >=)
 
-title : STRING(20) = "..."   # 最大 20 文字。超過代入はエラー
+title : STRING(20) = "..."   # max 20 characters; overlong assignment is an error
 ```
 
 ### nil
 
-`nil` は「値がない」ことを表すリテラルです。値渡しの言語なので、nil にならないのは struct / 配列 / 関数値で、主に**ホスト関数の戻り値が値なし**かどうかの検査に使います。
+`nil` is a literal meaning "no value". Since the language is pass-by-value, structs / arrays / function values can never become nil; the main use is checking whether a **host function returned no value**.
 
 ```
-v := findTag("S1")    # ホスト関数が nil を返した場合
+v := findTag("S1")    # when a host function returns nil
 if v != nil {
 	print(v)
 }
 ```
 
-- 比較は `== nil` / `!= nil` のみ(他の演算や if/for/switch の条件には使えない)
-- `x := nil` で NULL 型変数になる。数値/文字列演算は型エラー
-- `n : INT = nil` のような型付き宣言への nil は型不一致エラー
+- The only comparisons available are `== nil` / `!= nil` (it cannot be used in other operations, or as an if/for/switch condition)
+- `x := nil` creates a NULL-typed variable; arithmetic or string operations on it are type errors
+- Assigning nil to a typed declaration such as `n : INT = nil` is a type mismatch error
 
-### 型システム
+### Type System
 
 ```
-# struct(SPEC 4.3)+ 構造体リテラル(未指定フィールドはゼロ値)
+# struct (SPEC 4.3) + struct literal (unspecified fields get the zero value)
 type Motor struct {
 	speed:  INT
 	enable: BOOL
 }
 
 m := Motor{speed: 10}
-m.speed = 20                # フィールド代入
-m.stop()                    # メソッド
-n := m                      # 値渡し(深いコピー)
+m.speed = 20                # field assignment
+m.stop()                    # method
+n := m                      # pass-by-value (deep copy)
 
-# 固定長配列(サイズは型の一部)
-values : [10]INT            # ゼロ埋めで宣言
+# Fixed-size arrays (the size is part of the type)
+values : [10]INT            # declared zero-filled
 matrix : [3][3]INT
-values[0] = 5               # 実行時 + 静的な境界チェック
-buf : [8]WORD = io.inputs   # サイズ違いは静的エラー
+values[0] = 5               # runtime + static bounds checking
+buf : [8]WORD = io.inputs   # mismatched sizes are a static error
 
-# distinct 型(名義型:基本型との暗黙変換なし)
+# distinct types (nominal: no implicit conversion with the underlying type)
 type TEMP INT
-t : TEMP = TEMP(30)         # TEMP(30) で構築 / INT(t) で戻す
+t : TEMP = TEMP(30)         # build with TEMP(30) / get back with INT(t)
 ```
 
-### メソッド
+### Methods
 
 ```
-func (m: Motor) isStopped() BOOL {       # 値渡しレシーバ(変更は反映されない)
+func (m: Motor) isStopped() BOOL {       # value receiver (changes are not reflected)
 	return m.speed == 0
 }
 
-func (m: ref Motor) stop() BOOL { # ref レシーバ(変更が呼び出し側に反映)
+func (m: ref Motor) stop() BOOL { # ref receiver (changes are reflected in the caller)
 	m.speed = 0
 	return true
 }
 
-m.stop()                                 # postfix セレクタから呼ぶ
+m.stop()                                 # called via postfix selector
 ```
 
-### 関数
+### Functions
 
 ```
 func add(a: INT, b: INT) INT {
 	return a + b
 }
 
-# 複数戻り値(SPEC 5.3)。単一変数への多値代入は静的エラー
+# Multiple return values (SPEC 5.3). Assigning multiple values to a single variable is a static error
 func div(a: INT, b: INT) (INT, BOOL) {
 	return a / b, b != 0
 }
 
 q, ok := div(10, 2)
 
-# ref パラメータ(IEC VAR_IN_OUT 相当)
+# ref parameters (equivalent to IEC VAR_IN_OUT)
 func reset(m: ref Motor) BOOL {
 	m.speed = 0
 	return true
 }
-reset(m)         # 呼び出し側は修飾なし。関数内の変更が反映される
+reset(m)         # unqualified at the call site; changes inside the function are reflected
 ```
 
-### ファーストクラス関数
+### First-Class Functions
 
 ```
 func apply(fn: FUNC(x: INT) INT, v: INT) INT {
@@ -167,12 +169,12 @@ func apply(fn: FUNC(x: INT) INT, v: INT) INT {
 func double(x: INT) INT { return x * 2 }
 
 apply(double, 21)     # 42
-g := double           # 変数へ格納
+g := double           # stored in a variable
 g(10)                 # 20
-pick(true)(4)         # 関数を返す関数
+pick(true)(4)         # a function returning a function
 ```
 
-### 制御構文
+### Control Flow
 
 ```
 if temp > 30.0 && !alarm {
@@ -209,11 +211,11 @@ ruli> greet("ruli")
 ruli> .exit
 ```
 
-- 式の結果は `= 値` で表示(宣言・代入・関数定義は表示しない)
-- 未完の構文(`if x {` など)は `   >` プロンプトで継続
-- `.help` / `.exit`、Ctrl-D で終了
+- Expression results are printed as `= value` (declarations, assignments, and function definitions are not echoed)
+- Incomplete syntax (e.g. `if x {`) continues on the `   >` prompt
+- `.help` / `.exit`, or Ctrl-D, to quit
 
-## Go からの埋め込み(embed API)
+## Embedding from Go (embed API)
 
 ```go
 // control.ruli
@@ -237,30 +239,30 @@ import (
 
 func main() {
 	s := ruli.New()
-	s.SetOutput(os.Stdout) // print の出力先(未指定なら標準出力)
+	s.SetOutput(os.Stdout) // the output destination for print (standard output by default)
 
-	// ホスト関数を登録。ruli からは可変長関数に見え、
-	// 戻り値型宣言は静的型検査に使われる
+	// Register a host function. It appears as a variadic function in ruli;
+	// the declared return type is used for static type checking
 	s.SetFunction("readTag", "INT", func(args ...ruli.Value) (ruli.Value, error) {
-		// ここで実際のタグ読み出しを行う
+		// Do the actual tag read here
 		return ruli.NewIntValue(42), nil
 	})
 
-	// 実行環境と型検査のシンボルは呼び出し間で共有される
+	// The runtime environment and the type-checking symbols are shared across calls
 	if err := s.RunFile("control.ruli"); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
 
-	// ホストから変数を直接読む
+	// Read a variable directly from the host
 	v, _ := s.Env().Get("alarmCount")
 	fmt.Println("alarms:", v.Inspect())
 }
 ```
 
-他のホスト API: `RunString` / `EvalString`(値を返す) / `SetOutput` / `Env()`。値コンストラクタは `NewIntValue` / `NewRealValue` / `NewBoolValue` / `NewStringValue` / `NewArrayValue` / `NewStructValue` / `NewNullValue`。
+Other host APIs: `RunString` / `EvalString` (returns a value) / `SetOutput` / `Env()`. Value constructors include `NewIntValue` / `NewRealValue` / `NewBoolValue` / `NewStringValue` / `NewArrayValue` / `NewStructValue` / `NewNullValue`.
 
-## エラー表示
+## Error Reporting
 
 ```
 $ cat bad.ruli
@@ -270,34 +272,34 @@ $ ruli bad.ruli
 1:7: value 200 out of range for SINT (-128..127)
 ```
 
-パース → 型検査 → 実行の順で検査し、エラーの段階で停止します。複数のパース/型エラーは行ごとに列挙されます。
+Checking runs in the order parse → type check → execute, and stops at the first failing stage. Multiple parse/type errors are listed line by line.
 
-## アーキテクチャ
+## Architecture
 
 ```
 lexer → parser → ast → checker → evaluator
-                                  ↘ object (値・環境・実行時型定義)
+                                  ↘ object (values, environment, runtime type definitions)
 
-ruli (ルートパッケージ: embed API)
+ruli (root package: embed API)
 cmd/ruli (CLI / REPL)
 ```
 
-- **checker**:静的な型検査(型不一致・BOOL 条件・境界・値域・シグネチャ)。実行前にすべてのエラーを収集
-- **evaluator**:AST ツリーウォーク。宣言(declarations)と更新(assignment)で環境の振る舞いを分離
-- **object**:値の表現(Go int/float64 を値モデルとして共有)+ 値渡しのための深いコピー
+- **checker**: static type checking (type mismatches, BOOL conditions, bounds, ranges, signatures). Collects all errors before execution
+- **evaluator**: AST tree walk. Differentiates environment behavior between declarations and assignments
+- **object**: value representation (sharing Go int/float64 as the value model) + deep copies for pass-by-value
 
-## 開発
+## Development
 
 ```
-go build ./...    # ビルド
-go test ./...     # 全テスト(evaluator/parser/lexer/checker/ruli/cmd)
-go vet ./...      # 静的解析
+go build ./...    # Build
+go test ./...     # All tests (evaluator/parser/lexer/checker/ruli/cmd)
+go vet ./...      # Static analysis
 ```
 
-- 言語仕様: [`docs/SPEC.md`](docs/SPEC.md)
-- テスト: 単体テスト + `examples/` の回帰テスト
-- フェーズ 2 (バイトコード VM 化) は将来計画として SPEC 2.3 に記載しています。
+- Language spec: [`docs/SPEC.md`](docs/SPEC.md) (in Japanese)
+- Tests: unit tests + regression tests over `examples/`
+- Phase 2 (bytecode VM) is described as future work in SPEC 2.3
 
-## ライセンス
+## License
 
 MIT — [LICENSE](LICENSE)
