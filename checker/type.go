@@ -23,6 +23,9 @@ type Type struct {
 
 	// distinct 型 (SPEC 4.2) の基本型 (Name == 宣言した型名のときのみ有効)
 	Base *Type
+
+	// 文字列型の最大長 (SPEC 11)。0 は無制限 (括弧なしの STRING)
+	StrMax int
 }
 
 func (t *Type) Equal(other *Type) bool {
@@ -210,6 +213,10 @@ func (t *Type) String() string {
 			out += " " + r.String()
 		}
 		return out
+	case STRING_TYPE.Name:
+		if t.StrMax > 0 {
+			return fmt.Sprintf("STRING(%d)", t.StrMax)
+		}
 	}
 	return t.Name
 }
