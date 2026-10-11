@@ -706,7 +706,7 @@ func TestParseErrorUnclosedBlock(t *testing.T) {
 func TestParseErrorMissingClosingParen(t *testing.T) {
 	testParseErrors(
 		`print("a", "b"`,
-		[]string{"expected ')', got 'EOF'"},
+		[]string{`expected ',' or ')', got EOF`},
 		t,
 	)
 }
@@ -730,13 +730,11 @@ func TestParseErrorUnknownType(t *testing.T) {
 }
 
 func TestParseErrorMissingSemicolonInFor(t *testing.T) {
-	// エラー復帰機能を持たないため、最初のエラー以降はカスケードする
+	// panic モード復帰: 欠落した ; の位置で 1 エラー、条件と本体は正しく解析される
 	testParseErrors(
 		`for i := 0 i < 10; i++ { }`,
 		[]string{
 			"expected ';', got 'i'",
-			"unexpected token '{'",
-			"unexpected token '}'",
 		},
 		t,
 	)
@@ -1179,10 +1177,6 @@ func TestParameterRequiresType(t *testing.T) {
 		`func f(a) BOOL { return true }`,
 		[]string{
 			"parameter 'a' requires a type",
-			"expected '{', got ')'",
-			"unexpected token ')'",
-			"expected ':', got 'true'",
-			"unexpected token '}'",
 		},
 		t,
 	)
@@ -1306,4 +1300,35 @@ func TestStructLiteralInParenthesizedCondition(t *testing.T) {
 	if _, ok := program.Statements[0].(*ast.IfStatement); !ok {
 		t.Fatalf("stmt not *ast.IfStatement. got=%T", program.Statements[0])
 	}
+}
+
+func TestParseErrorRecoveryInParams(t *testing.T) {
+	// panic モード復帰: パラメータ 1 つの間違いで 1 エラー、以降は正常解析
+	testParseErrors(
+		`func f(a: INT, b BOOL, c: INT) BOOL { return true }`,
+		[]string{"parameter 'b' requires a type"},
+		t,
+	)
+}
+
+func TestParseErrorRecoveryInArgs(t *testing.T) {
+	// 引数リストの復帰: 区切り忘れは 1 エラー、残りの引数は解析される
+	testParseErrors(
+		`print(1 2, 3)`,
+		[]string{`expected ',' or ')', got '2'`},
+		t,
+	)
+}
+
+func TestParseErrorRecoveryInCaseValues(t *testing.T) {
+	// case 値の : 欠落は 1 エラー、本体は解析される
+	testParseErrors(
+		`x := 1
+switch x {
+case 1 2:
+	print("one")
+}`,
+		[]string{"expected ':', got '2'"},
+		t,
+	)
 }

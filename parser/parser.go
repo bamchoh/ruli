@@ -157,6 +157,19 @@ func tokenLabel(tok lexer.Token) string {
 	return string(tok.Type)
 }
 
+// syncTo は panic モード復帰: 指定トークン (または EOF) に到達するまで読み進める。
+// エラーのカスケードを防ぐため、区切りに到達したところから解析を再開する
+func (p *Parser) syncTo(tokens ...lexer.TokenType) {
+	set := make(map[lexer.TokenType]bool, len(tokens))
+	for _, t := range tokens {
+		set[t] = true
+	}
+
+	for !set[p.curToken.Type] && p.curToken.Type != lexer.EOF {
+		p.nextToken()
+	}
+}
+
 func (p *Parser) ParseProgram() *ast.Program {
 	program := &ast.Program{
 		Token: p.curToken,
@@ -781,12 +794,14 @@ func (p *Parser) parseForStatement() *ast.ForStatement {
 	p.nextToken() // init first token
 	stmt.Init = p.parseStatement()
 
-	if !p.expectPeek(lexer.SEMICOLON) {
-		return stmt
+	// 節の境界 (;)。欠けていてもカスケードしない: 次節の先頭から解析を続ける
+	if p.peekToken.Type == lexer.SEMICOLON {
+		p.nextToken() // ;
+		p.nextToken() // condition first token
+	} else {
+		p.errorAtPeek("expected ';', got '%s'", tokenLabel(p.peekToken))
+		p.nextToken() // condition first token
 	}
-
-	p.nextToken() // ;
-	p.nextToken() // condition first token
 
 	// for 条件部でも struct リテラルを禁止 (ブロック {} との曖昧性の解消)
 	prev := p.allowStructLiteral
@@ -794,12 +809,13 @@ func (p *Parser) parseForStatement() *ast.ForStatement {
 	stmt.Condition = p.parseExpression(LOWEST)
 	p.allowStructLiteral = prev
 
-	if !p.expectPeek(lexer.SEMICOLON) {
-		return stmt
+	if p.peekToken.Type == lexer.SEMICOLON {
+		p.nextToken() // ;
+		p.nextToken() // post first token
+	} else {
+		p.errorAtPeek("expected ';', got '%s'", tokenLabel(p.peekToken))
+		p.nextToken() // post first token
 	}
-
-	p.nextToken() // ;
-	p.nextToken() // post first token
 	stmt.Post = p.parseStatement()
 
 	if !p.expectPeek(lexer.LBRACE) {
@@ -826,6 +842,8 @@ func (p *Parser) parseCallExpression(function ast.Expression) ast.Expression {
 	return exp
 }
 
+// parseExpressionList は ( 要素 ) / [ 要素 ] のような要素リストをパースする。
+// 区切りが欠けた場合は panic モード復帰する (カスケード防止)
 func (p *Parser) parseExpressionList(end lexer.TokenType) []ast.Expression {
 	var list []ast.Expression
 
@@ -837,17 +855,50 @@ func (p *Parser) parseExpressionList(end lexer.TokenType) []ast.Expression {
 	p.nextToken()
 	list = append(list, p.parseExpression(LOWEST))
 
-	for p.peekToken.Type == lexer.COMMA {
-		p.nextToken()
-		p.nextToken()
-		list = append(list, p.parseExpression(LOWEST))
-	}
+	for {
+		switch {
+		case p.peekToken.Type == lexer.COMMA:
+			p.nextToken() // ,
+			if p.peekToken.Type == end {
+				// 末尾カンマ
+				p.nextToken()
+				return list
+			}
+			p.nextToken() // next element first token
+			list = append(list, p.parseExpression(LOWEST))
 
-	if p.expectPeek(end) {
-		p.nextToken() // consume end token
-	}
+		case p.peekToken.Type == end:
+			p.nextToken() // end を消費して終了
+			return list
 
-	return list
+		default:
+			if p.peekToken.Type == lexer.EOF {
+				p.errorAtPeek("expected ',' or '%s', got EOF", string(end))
+				return list
+			}
+			p.errorAtPeek("expected ',' or '%s', got '%s'", string(end), tokenLabel(p.peekToken))
+
+			// panic モード復帰: 区切りまでスキップして解析を再開する
+			p.syncTo(lexer.COMMA, end)
+
+			switch p.curToken.Type {
+			case lexer.COMMA:
+				p.nextToken() // , を消費 → cur は次の要素の先頭
+				if p.curToken.Type == end {
+					p.nextToken()
+					return list
+				}
+				list = append(list, p.parseExpression(LOWEST))
+
+			case end:
+				p.nextToken()
+				return list
+
+			default:
+				return list // EOF
+			}
+		}
+	}
 }
 
 // parseTypeDeclStatement は type Motor struct { ... } をパースする
@@ -987,6 +1038,13 @@ func (p *Parser) parseSwitchCase() *ast.SwitchCase {
 	}
 
 	if !p.expectPeek(lexer.COLON) {
+		// panic モード復帰: : または次の case / default / } までスキップする
+		p.syncTo(lexer.COLON, lexer.CASE, lexer.DEFAULT, lexer.RBRACE)
+		if p.curToken.Type == lexer.COLON {
+			p.nextToken() // :
+			p.nextToken() // first stmt in body
+			sc.Body = p.parseCaseBody()
+		}
 		return sc
 	}
 
@@ -1094,6 +1152,8 @@ func (p *Parser) parseFunctionStatement() *ast.FunctionStatement {
 	return stmt
 }
 
+// parseFunctionParameters はパラメータリストをパースする。
+// ループの invariant は「cur がパラメータ名の先頭」
 func (p *Parser) parseFunctionParameters() []ast.Parameter {
 	var params []ast.Parameter
 
@@ -1102,54 +1162,114 @@ func (p *Parser) parseFunctionParameters() []ast.Parameter {
 		return params
 	}
 
+	p.nextToken() // first param name
+
 	for {
-		p.nextToken() // param name
+		switch {
+		case p.curToken.Type == lexer.RPAREN:
+			p.nextToken() // ) を消費して終了
+			return params
+
+		case p.curToken.Type == lexer.EOF:
+			p.errorAt(p.curToken, "expected ')', got EOF")
+			return params
+		}
 
 		param := ast.Parameter{
 			Name: p.curToken.Literal,
 		}
 
 		// パラメータは必ず型付き (SPEC 5.1)
+		hadTypeError := false
 		if p.peekToken.Type != lexer.COLON {
 			p.errorAtPeek("parameter '%s' requires a type", param.Name)
-			return params
-		}
+			hadTypeError = true
+		} else {
+			p.nextToken() // colon
+			p.nextToken() // type first token (または ref)
 
-		p.nextToken() // colon
-		p.nextToken() // type first token (または ref)
+			if p.curToken.Type == lexer.REF {
+				// ref はパラメータ型の一部 (SPEC 5.5 / IEC VAR_IN_OUT): m: ref Motor
+				if isTypeStartToken(p.peekToken.Type) {
+					param.Ref = true
+					p.nextToken() // type first token
 
-		if p.curToken.Type == lexer.REF {
-			// ref はパラメータ型の一部 (SPEC 5.5 / IEC VAR_IN_OUT): m: ref Motor
-			p.nextToken() // type first token
-
-			if p.curToken.Type == lexer.COMMA || p.curToken.Type == lexer.RPAREN ||
-				p.curToken.Type == lexer.EOF {
-				p.errorAt(p.curToken, "ref parameter requires a type")
-				return params
+					param.Type = p.parseType()
+					if param.Type == nil {
+						p.errorAt(p.curToken, "unknown type '%s'", tokenLabel(p.curToken))
+						hadTypeError = true
+					}
+				} else {
+					p.errorAtPeek("ref parameter requires a type")
+					hadTypeError = true
+				}
+			} else {
+				param.Type = p.parseType()
+				if param.Type == nil {
+					p.errorAt(p.curToken, "unknown type '%s'", tokenLabel(p.curToken))
+					hadTypeError = true
+				}
 			}
-
-			param.Ref = true
-		}
-
-		param.Type = p.parseType()
-		if param.Type == nil {
-			p.errorAt(p.curToken, "unknown type '%s'", tokenLabel(p.curToken))
 		}
 
 		params = append(params, param)
 
-		if p.peekToken.Type == lexer.COMMA {
-			p.nextToken()
-			continue
+		// 型エラーの復帰: 同じ位置で区切りエラーを重複報告しない
+		if hadTypeError {
+			p.syncTo(lexer.COMMA, lexer.RPAREN)
+
+			switch p.curToken.Type {
+			case lexer.COMMA:
+				p.nextToken() // , を消費 → cur は次のパラメータ名
+				continue
+			case lexer.RPAREN:
+				p.nextToken()
+				return params
+			default:
+				return params // EOF
+			}
 		}
 
-		if p.peekToken.Type == lexer.RPAREN {
+		// 区切り / 復帰 (panic モード: , か ) までスキップして解析を再開)
+		switch {
+		case p.peekToken.Type == lexer.COMMA:
+			p.nextToken() // ,
+			if p.peekToken.Type == lexer.RPAREN {
+				// 末尾カンマ
+				p.nextToken()
+				return params
+			}
+			p.nextToken() // next param name
+
+		case p.peekToken.Type == lexer.RPAREN:
 			p.nextToken()
-			break
+			return params
+
+		default:
+			if p.peekToken.Type == lexer.EOF {
+				p.errorAtPeek("expected ',' or ')', got EOF")
+				return params
+			}
+			p.errorAtPeek("expected ',' or ')', got '%s'", tokenLabel(p.peekToken))
+			p.syncTo(lexer.COMMA, lexer.RPAREN)
+
+			switch p.curToken.Type {
+			case lexer.COMMA:
+				p.nextToken() // , を消費 → cur は次のパラメータ名
+				continue
+			case lexer.RPAREN:
+				p.nextToken()
+				return params
+			default:
+				return params // EOF
+			}
 		}
 	}
+}
 
-	return params
+// isTypeStartToken は型の開始になり得るトークンか (IDENT / 配列型の [ )
+func isTypeStartToken(t lexer.TokenType) bool {
+	return t == lexer.IDENT || t == lexer.LBRACKET
 }
 
 func (p *Parser) parseStringLiteral() ast.Expression {

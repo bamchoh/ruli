@@ -26,7 +26,7 @@ func TestRunParseError(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error")
 	}
-	if got := err.Error(); got != "1:15: expected ')', got 'EOF'" {
+	if got := err.Error(); got != "1:15: expected ',' or ')', got EOF" {
 		t.Fatalf("wrong error. got=%q", got)
 	}
 }

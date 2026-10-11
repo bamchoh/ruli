@@ -485,6 +485,7 @@ lexer → parser → ast → checker → evaluator → object
 
 - `checker.Check` が静的な型検査を行う（実行前）
 - エラーは 行:列 形式で報告され、parse → checker の順で最初の段階で停止する
+- パーサは panic モード復帰を持つ: 区切り（`,` `)` `:` `;` など）まで読み飛ばして解析を再開し、1 つの間違いがカスケードしないようにする
 
 # 17. CLI
 
