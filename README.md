@@ -4,7 +4,7 @@
   <img alt="Logo" src="logo.png" width="50%" height="50%">
 </p>
 
-[English](README.md) | 日本語
+[English](README.md) | [日本語](README.ja-JP.md)
 
 **ruli** is an embeddable, statically-typed, AST-interpreter scripting language written in Go.
 
@@ -53,15 +53,15 @@ print(x)           # 20 (:= inside a block doesn't pollute the outer scope)
 
 Types descended from IEC 61131-3. Ranges are checked at declaration, assignment, `++`/`--`, and casts; overflow is an **error**, not a silent wrap.
 
-| Type                 | Signedness    | Range                    | Notes                    |
-| -------------------- | ------------- | ------------------------ | ------------------------ |
-| BOOL                 | -             | true/false               |                          |
-| SINT / USINT / BYTE  | ± / none      | −128..127 / 0..255       | 8-bit                    |
-| INT / UINT / WORD    | ± / none      | −32768..32767 / 0..65535 | 16-bit                   |
-| DINT / UDINT / DWORD | ± / none      | 32-bit                   |                          |
-| LINT / ULINT / LWORD | ± / none      | 64-bit                   |                          |
-| REAL / LREAL         | -             | float / double           |                          |
-| STRING / STRING(n)   | -             | string                   | n is the max length (runes) |
+| Type                 | Signedness | Range                    | Notes                       |
+| -------------------- | ---------- | ------------------------ | --------------------------- |
+| BOOL                 | -          | true/false               |                             |
+| SINT / USINT / BYTE  | ± / none   | −128..127 / 0..255       | 8-bit                       |
+| INT / UINT / WORD    | ± / none   | −32768..32767 / 0..65535 | 16-bit                      |
+| DINT / UDINT / DWORD | ± / none   | 32-bit                   |                             |
+| LINT / ULINT / LWORD | ± / none   | 64-bit                   |                             |
+| REAL / LREAL         | -          | float / double           |                             |
+| STRING / STRING(n)   | -          | string                   | n is the max length (runes) |
 
 ```
 temp : SINT = -40        # OK

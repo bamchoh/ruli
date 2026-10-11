@@ -4,7 +4,7 @@
   <img alt="ロゴ" src="logo.png" width="50%" height="50%">
 </p>
 
-English | [日本語](README.ja-JP.md)
+[English](README.md) | [日本語](README.ja-JP.md)
 
 **ruli(瑠璃)** は Go に埋め込み可能な、静的型付けの AST インタプリタ型スクリプト言語です。
 
